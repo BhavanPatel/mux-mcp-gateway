@@ -76,4 +76,7 @@ fi
 git add "$PKG" "$CHANGELOG"
 git commit --no-verify -m "chore(release): $NEW_VERSION"
 
+# Auto-tag for npm publish
+git tag "v$NEW_VERSION"
+
 echo "📦 Auto-versioned: $CURRENT → $NEW_VERSION ($BUMP) on branch $BRANCH"
