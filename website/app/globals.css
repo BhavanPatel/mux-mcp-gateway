@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-space-black: #050510;
+  --color-space-deep: #0a0a1a;
+  --color-space-surface: #12122a;
+  --color-mux-cyan: #a78bfa;
+  --color-mux-purple: #7c3aed;
+  --color-mux-green: #10b981;
+  --color-mux-amber: #f59e0b;
+  --color-mux-red: #ef4444;
+  --color-text-primary: #f0f4ff;
+  --color-text-secondary: #b4bcd0;
+  --color-text-muted: #5a6480;
+  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #050510;
+  color: #f0f4ff;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  font-family: var(--font-space-grotesk), 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-space-grotesk), 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+code, pre, .font-mono {
+  font-family: var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, monospace;
+}
+
+::selection {
+  background: rgba(0, 212, 255, 0.2);
+  color: white;
+}
+
+::-webkit-scrollbar { width: 2px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #a78bfa; border-radius: 1px; }
+
+
+/* Animated gradient text */
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animated-gradient-text {
+  animation: gradient-shift 6s ease infinite;
+}

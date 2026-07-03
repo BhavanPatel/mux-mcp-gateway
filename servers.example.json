@@ -1,0 +1,37 @@
+{
+  "servers": {
+    "gitlab": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@zereight/mcp-gitlab"],
+      "env": {
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "${GITLAB_TOKEN}",
+        "GITLAB_API_URL": "https://gitlab.example.com/"
+      },
+      "keywords": ["gitlab", "merge request", "MR", "pipeline", "branch"],
+      "idleTimeoutMs": 300000
+    },
+    "elasticsearch": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["--python", "3.12", "elasticsearch-mcp-server"],
+      "env": {
+        "ELASTICSEARCH_HOSTS": "https://elasticsearch.example.com:9200",
+        "ELASTICSEARCH_USERNAME": "${ES_USERNAME}",
+        "ELASTICSEARCH_PASSWORD": "${ES_PASSWORD}"
+      },
+      "keywords": ["elasticsearch", "kibana", "logs", "search"],
+      "idleTimeoutMs": 180000
+    },
+    "datadog": {
+      "transport": "http",
+      "url": "https://mcp.datadoghq.eu/api/unstable/mcp-server/mcp",
+      "headers": {
+        "DD-API-KEY": "${DD_API_KEY}",
+        "DD-APPLICATION-KEY": "${DD_APP_KEY}"
+      },
+      "keywords": ["datadog", "metrics", "traces", "APM"],
+      "idleTimeoutMs": 300000
+    }
+  }
+}

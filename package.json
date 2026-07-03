@@ -1,0 +1,59 @@
+{
+  "name": "mux-mcp-gateway",
+  "version": "1.0.0",
+  "description": "MCP Gateway Router — one MCP to rule them all",
+  "type": "module",
+  "bin": {
+    "mux": "dist/index.js",
+    "mux-cli": "mux.sh"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "mux.sh",
+    "servers.example.json"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "test": "bash test/test.sh",
+    "prepare": "git config core.hooksPath .hooks",
+    "prepublishOnly": "npm run build",
+    "install-cli": "npm install && npm run build && npm link"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BhavanPatel/mux.git"
+  },
+  "homepage": "https://github.com/BhavanPatel/mux",
+  "bugs": {
+    "url": "https://github.com/BhavanPatel/mux/issues"
+  },
+  "keywords": [
+    "mcp",
+    "gateway",
+    "router",
+    "ai",
+    "kiro",
+    "cursor",
+    "model-context-protocol",
+    "mux"
+  ],
+  "author": "Bhavan Patel (https://github.com/BhavanPatel)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.12.1"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "tsup": "8.3.5",
+    "@types/node": "22.10.5"
+  }
+}
