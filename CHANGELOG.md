@@ -2,6 +2,11 @@
 
 ## [1.1.0] — 2026-07-15
 
+### Added
+-  smart OAuth detection, early auth resolution, countdown timer + lint/test infrastructure
+
+## [1.1.0] — 2026-07-15
+
 ### Fixed
 - **False auth detection** — HTTP servers that don't support OAuth (API-key-based, internal services) no longer trigger the 120s auth timeout. Mux now probes `/.well-known/oauth-authorization-server` before starting the OAuth flow.
 - **Auth timeout ignoring completed auth** — Token file polling now detects externally-completed authorization immediately instead of waiting the full 120s timeout.
