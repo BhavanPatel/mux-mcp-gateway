@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.7] — 2026-07-15
+
+### Fixed
+-  health and list commands use read-tokens.mjs for encrypted token detection
+
 ## [1.3.6] — 2026-07-15
 
 ### Fixed
