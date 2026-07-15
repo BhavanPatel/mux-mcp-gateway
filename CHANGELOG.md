@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.0] — 2026-07-15
+
+### Added
+-  AES-256-GCM encryption for tokens/clients + security hardening
+
 ## [1.2.0] — 2026-07-15
 
 ### Added
