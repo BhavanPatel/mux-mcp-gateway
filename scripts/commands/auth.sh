@@ -24,37 +24,35 @@ cmd_auth() {
 }
 
 _list_http_servers() {
+    local authed_servers
+    authed_servers=$(node "$SCRIPT_DIR/scripts/lib/read-tokens.mjs" --list-authed 2>/dev/null)
+
     python3 -c "
 import json, sys, os
 with open(sys.argv[1]) as f: r = json.load(f)
-tokens = {}
-try:
-    with open(os.path.expanduser('~/.mux/tokens.json')) as f: tokens = json.load(f)
-except: pass
+authed = set(sys.argv[2].split('\n')) if sys.argv[2] else set()
 for n, c in r.get('servers',{}).items():
     if c.get('transport') == 'http':
-        t = tokens.get(n, {})
-        has = bool(t.get('access_token') or t.get('accessToken'))
+        has = n in authed
         status = '  ✔ authorized' if has else '  ✖ not authorized'
         print(f'    {n:<30s}{status}')
-" "$REGISTRY"
+" "$REGISTRY" "$authed_servers"
 }
 
 _auth_all() {
+    local authed_servers
+    authed_servers=$(node "$SCRIPT_DIR/scripts/lib/read-tokens.mjs" --list-authed 2>/dev/null)
+
     local servers
     servers=$(python3 -c "
 import json, sys, os
 with open(sys.argv[1]) as f: r = json.load(f)
-tokens = {}
-try:
-    with open(os.path.expanduser('~/.mux/tokens.json')) as f: tokens = json.load(f)
-except: pass
+authed = set(sys.argv[2].split('\n')) if sys.argv[2] else set()
 for n, c in r.get('servers',{}).items():
     if c.get('transport') == 'http':
-        t = tokens.get(n, {})
-        if not (t.get('access_token') or t.get('accessToken')):
+        if n not in authed:
             print(n)
-" "$REGISTRY")
+" "$REGISTRY" "$authed_servers")
 
     if [[ -z "$servers" ]]; then
         echo ""
@@ -76,14 +74,7 @@ for n, c in r.get('servers',{}).items():
 
         # Check if it failed
         local check
-        check=$(python3 -c "
-import json, sys, os
-try:
-    with open(os.path.expanduser('~/.mux/tokens.json')) as f: t = json.load(f)
-    e = t.get(sys.argv[1],{})
-    print('yes' if e.get('access_token') or e.get('accessToken') else 'no')
-except: print('no')
-" "$srv")
+        check=$(node "$SCRIPT_DIR/scripts/lib/read-tokens.mjs" "$srv")
         if [[ "$check" != "yes" ]]; then
             failed_servers+=("$srv")
         fi
@@ -143,14 +134,7 @@ print(c.get('url','') if c.get('transport')=='http' else 'NOT_HTTP')
         # Print countdown timer (overwrite same line)
         printf "\r  ${C_GRAY}⏳ Waiting for authorization... ${C_WHITE}%3ds${C_GRAY} remaining${C_RESET}" "$remaining"
 
-        has_token=$(python3 -c "
-import json, sys, os
-try:
-    with open(os.path.expanduser('~/.mux/tokens.json')) as f: t = json.load(f)
-    e = t.get(sys.argv[1],{})
-    print('yes' if e.get('access_token') or e.get('accessToken') else 'no')
-except: print('no')
-" "$name")
+        has_token=$(node "$SCRIPT_DIR/scripts/lib/read-tokens.mjs" "$name")
         if [[ "$has_token" == "yes" ]]; then
             # Clear timer line
             printf "\r\033[K"

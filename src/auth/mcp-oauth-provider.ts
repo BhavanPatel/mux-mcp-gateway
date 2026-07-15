@@ -7,10 +7,11 @@ import type {
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { exec } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, chmodSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from '../logger.js';
+import { readSecureJson, writeSecureJson } from './crypto.js';
 
 const MUX_DIR = resolve(homedir(), '.mux');
 const TOKEN_PATH = resolve(MUX_DIR, 'tokens.json');
@@ -24,26 +25,31 @@ interface MuxOAuthProviderOptions {
 }
 
 function ensureDir() {
-  if (!existsSync(MUX_DIR)) mkdirSync(MUX_DIR, { recursive: true });
+  if (!existsSync(MUX_DIR)) {
+    mkdirSync(MUX_DIR, { recursive: true });
+    chmodSync(MUX_DIR, 0o700);
+  }
 }
 
 function readJson(path: string): Record<string, any> {
-  try {
-    return JSON.parse(readFileSync(path, 'utf-8'));
-  } catch {
-    return {};
-  }
+  return readSecureJson(path) as Record<string, any>;
 }
 
 function writeJson(path: string, data: any) {
   ensureDir();
-  writeFileSync(path, JSON.stringify(data, null, 2), 'utf-8');
-  chmodSync(path, 0o600);
+  writeSecureJson(path, data);
 }
 
 function openBrowser(url: string): void {
-  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-  exec(`${cmd} "${url}"`);
+  // Sanitize URL to prevent command injection via exec
+  const sanitized = url.replace(/["`$\\!]/g, '');
+  const cmd =
+    process.platform === 'darwin'
+      ? 'open'
+      : process.platform === 'win32'
+        ? 'start'
+        : 'xdg-open';
+  exec(`${cmd} "${sanitized}"`);
 }
 
 /**
@@ -133,20 +139,24 @@ export class MuxOAuthProvider implements OAuthClientProvider {
         }
       }, 1000);
 
+      // Record file mtime at auth start — if it changes, tokens were written
+      // No decryption needed — just detect the file was modified
+      let startMtime = 0;
+      try { startMtime = statSync(TOKEN_PATH).mtimeMs; } catch { /* file may not exist yet */ }
+
       this._pollingInterval = setInterval(() => {
         try {
-          const store = readJson(TOKEN_PATH);
-          const entry = store[this.serverName];
-          if (entry && (entry.access_token || entry.accessToken)) {
-            // Token appeared — auth completed externally (redirect flow)
+          if (!existsSync(TOKEN_PATH)) return;
+          const currentMtime = statSync(TOKEN_PATH).mtimeMs;
+          if (currentMtime > startMtime) {
+            // Token file was modified — auth completed externally
             this._stopPolling();
             this._stopCountdown();
             process.stderr.write(`\r\x1b[K[MUX] ✔ Authorization for "${this.serverName}" detected (token received)\n`);
-            // Return special sentinel — http.ts will see this and skip finishAuth
             resolve('__TOKEN_ALREADY_SAVED__');
           }
         } catch {
-          // Ignore read errors, keep polling
+          // Ignore stat errors, keep polling
         }
       }, 1000);
 
@@ -294,8 +304,8 @@ export class MuxOAuthProvider implements OAuthClientProvider {
         resolve(code);
       });
 
-      this._callbackServer.listen(CALLBACK_PORT, () => {
-        logger.debug(`OAuth callback server listening on port ${CALLBACK_PORT}`);
+      this._callbackServer.listen(CALLBACK_PORT, '127.0.0.1', () => {
+        logger.debug(`OAuth callback server listening on 127.0.0.1:${CALLBACK_PORT}`);
       });
 
       this._callbackServer.on('error', (err) => {

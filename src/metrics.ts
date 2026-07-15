@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from './logger.js';
@@ -23,7 +23,10 @@ let dirty = false;
 
 function ensureDir() {
   const dir = dirname(METRICS_PATH);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+    chmodSync(dir, 0o700);
+  }
 }
 
 export function loadMetrics(): void {

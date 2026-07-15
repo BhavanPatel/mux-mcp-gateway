@@ -2,7 +2,7 @@
  * Persistent catalog of tool schemas discovered from downstream servers.
  * Written on first connection, read for discovery and pre-connect tool listing.
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from './logger.js';
@@ -25,7 +25,10 @@ const CATALOG_TTL_MS = 3_600_000; // 1 hour
 
 function ensureDir(): void {
   const dir = dirname(CATALOG_PATH);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+    chmodSync(dir, 0o700);
+  }
 }
 
 function readCatalog(): Catalog {

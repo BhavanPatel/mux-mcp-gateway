@@ -79,17 +79,18 @@ Mux now detects externally-completed authorization immediately:
 
 ### Token Persistence
 
-Tokens are stored in `~/.mux/tokens.json` with file permissions `0600` (owner read/write only).
+Tokens are stored **encrypted** in `~/.mux/tokens.json` using AES-256-GCM. The file is never plain text.
 
+**Security layers:**
+- AES-256-GCM encryption at rest (tokens + client registrations)
+- Key derived from machine identity via PBKDF2 (100k iterations)
+- File permissions `0600` (owner read/write only)
+- Directory permissions `0700` on `~/.mux/`
+- OAuth callback server bound to `127.0.0.1` only (not network-accessible)
+
+**What `cat ~/.mux/tokens.json` shows:**
 ```json
-{
-  "sitecore": {
-    "accessToken": "eyJ...",
-    "refreshToken": "dGhp...",
-    "expiresAt": 1719320400000,
-    "scopes": ["openid", "sitecore.profile"]
-  }
-}
+{"v":1,"enc":"WgWcn6RPi5TO60lD...","iv":"abc123...","tag":"xyz789..."}
 ```
 
 **Token lifecycle:**

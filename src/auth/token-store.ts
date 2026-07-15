@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync, mkdirSync, chmodSync, existsSync } from 'node:fs';
+import { existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from '../logger.js';
+import { readSecureJson, writeSecureJson } from './crypto.js';
 
 export interface TokenEntry {
   accessToken: string;
@@ -18,30 +19,23 @@ function getStorePath(): string {
   return process.env.MUX_TOKEN_STORE_PATH || DEFAULT_STORE_PATH;
 }
 
-function ensureStoreExists(): void {
+function ensureStoreDir(): void {
   const path = getStorePath();
   const dir = dirname(path);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  if (!existsSync(path)) {
-    writeFileSync(path, '{}', 'utf-8');
-    chmodSync(path, 0o600);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+    chmodSync(dir, 0o700);
   }
 }
 
 function readStore(): TokenStore {
-  ensureStoreExists();
-  try {
-    return JSON.parse(readFileSync(getStorePath(), 'utf-8'));
-  } catch {
-    return {};
-  }
+  ensureStoreDir();
+  return readSecureJson(getStorePath()) as TokenStore;
 }
 
 function writeStore(store: TokenStore): void {
-  ensureStoreExists();
-  const path = getStorePath();
-  writeFileSync(path, JSON.stringify(store, null, 2), 'utf-8');
-  chmodSync(path, 0o600);
+  ensureStoreDir();
+  writeSecureJson(getStorePath(), store);
 }
 
 export function getToken(serverName: string): TokenEntry | undefined {

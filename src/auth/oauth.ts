@@ -16,8 +16,9 @@ const CALLBACK_PORT = 48912;
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}/callback`;
 
 function openBrowser(url: string): void {
+  const sanitized = url.replace(/["`$\\!]/g, '');
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-  exec(`${cmd} "${url}"`);
+  exec(`${cmd} "${sanitized}"`);
 }
 
 function deriveAuthEndpoint(tokenEndpoint: string): string {
@@ -108,7 +109,7 @@ export async function performOAuthFlow(serverName: string, config: OAuthConfig):
       }
     });
 
-    server.listen(CALLBACK_PORT, () => {
+    server.listen(CALLBACK_PORT, '127.0.0.1', () => {
       logger.info(`OAuth: opening browser for "${serverName}"...`);
       openBrowser(authUrl.toString());
     });
