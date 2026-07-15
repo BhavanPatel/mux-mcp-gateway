@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.5] — 2026-07-15
+
+### Fixed
+-  detect HTTP 401 responses as auth-needed in Phase 1 connect
+
 ## [1.3.4] — 2026-07-15
 
 ### Fixed
