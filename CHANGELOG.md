@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.1] — 2026-07-15
+
+### Fixed
+-  add pre-commit auto-format hook, fix lint warnings, remove unused imports
+
 ## [1.3.0] — 2026-07-15
 
 ### Added
