@@ -5,10 +5,15 @@ cmd_health() {
     require_registry
     echo -e "\n  ${C_BOLD}Server Health Check${C_RESET}\n"
 
+    # Get list of authorized servers (handles encrypted tokens)
+    local authed_servers
+    authed_servers=$(node "$SCRIPT_DIR/scripts/lib/read-tokens.mjs" --list-authed 2>/dev/null)
+
     local check_output
     check_output=$(python3 -c "
 import json, sys, os, shutil
 with open(sys.argv[1]) as f: reg = json.load(f)
+authed = set(sys.argv[2].split('\n')) if sys.argv[2] else set()
 for name, cfg in reg.get('servers',{}).items():
     t = cfg.get('transport','stdio')
     if t == 'stdio':
@@ -21,15 +26,9 @@ for name, cfg in reg.get('servers',{}).items():
     elif t == 'http':
         url = cfg.get('url','')
         if not url: print(f'fail|{name}|http|No URL'); continue
-        has_token = False
-        try:
-            with open(os.path.expanduser('~/.mux/tokens.json')) as f:
-                tk = json.load(f).get(name,{})
-                has_token = bool(tk.get('access_token') or tk.get('accessToken'))
-        except: pass
-        if has_token: print(f'pass|{name}|http|Token cached')
+        if name in authed: print(f'pass|{name}|http|Token cached')
         else: print(f'warn|{name}|http|Not authorized (mux-cli auth)')
-" "$REGISTRY")
+" "$REGISTRY" "$authed_servers")
 
     _print_health_table "$check_output"
 }
