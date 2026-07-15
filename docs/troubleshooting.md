@@ -5,21 +5,34 @@
 If something isn't working, start by enabling verbose logging:
 
 ```bash
-# Set log level to debug (default is 'info')
-export MUX_LOG_LEVEL=debug
+# Add these env vars to your mux config in mcp.json:
+"env": {
+  "MUX_LOG_LEVEL": "debug",
+  "MUX_LOG_TO_FILE": "true"
+}
 
-# Run mux — all internal decisions are logged to stderr
+# Then tail the log in a separate terminal:
+tail -f ~/.mux/mux.log
+```
+
+```bash
+# Or when running mux manually (stderr only):
+export MUX_LOG_LEVEL=debug
 mux
 ```
 
 Log levels: `error` → `warn` → `info` → `debug`
 
-Logs are written to **stderr** so they don't interfere with MCP protocol messages on stdout. Look for lines like:
+Logs include timestamps and context:
 
 ```
-[MUX] [debug] [2026-07-15T04:30:07.016Z] Routing call: gitlab.list_merge_requests (attempt 1)
 [MUX] [info]  [2026-07-15T04:30:07.200Z] Server "datadog" returned 401. Probing OAuth discovery...
+[MUX] [debug] [2026-07-15T04:30:07.500Z] OAuth discovery confirmed for "datadog"
+[MUX] [debug] [2026-07-15T04:30:08.016Z] Routing call: gitlab.list_merge_requests (attempt 1)
 ```
+
+> [!TIP]
+> When using Kiro or Cursor, stderr goes to the client's internal logs which are hard to access. Always use `MUX_LOG_TO_FILE=true` for debugging.
 
 ---
 
@@ -101,7 +114,39 @@ Then retry the auth flow.
 
 ---
 
-### 7. Still Not Working?
+### 7. Auto-Approve Not Working
+
+**Symptoms:** AI client asks for approval on every mux tool call.
+
+**Fix:** Add `autoApprove` to your mux entry in your client's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "mux": {
+      "command": "node",
+      "args": ["/path/to/mux/dist/index.js"],
+      "env": {
+        "MUX_LOG_LEVEL": "info",
+        "MUX_REGISTRY_PATH": "~/.mux/servers.json"
+      },
+      "autoApprove": [
+        "mux_list_servers",
+        "mux_call_tool",
+        "mux_find_tool",
+        "mux_status"
+      ]
+    }
+  }
+}
+```
+
+> [!TIP]
+> `mux-cli setup` adds all 4 tools to autoApprove automatically.
+
+---
+
+### 8. Still Not Working?
 
 If none of the above solves your issue:
 

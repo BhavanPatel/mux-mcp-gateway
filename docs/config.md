@@ -66,6 +66,7 @@ Use `${VAR_NAME}` syntax in `command`, `args`, `env`, `headers`, and `url` field
 | Variable | Default | Description |
 |:---------|:--------|:------------|
 | `MUX_LOG_LEVEL` | `info` | `error` \| `warn` \| `info` \| `debug` |
+| `MUX_LOG_TO_FILE` | `false` | Set `true` to write logs to `~/.mux/mux.log` |
 | `MUX_REGISTRY_PATH` | `~/.mux/servers.json` | Path to server registry |
 | `MUX_TOKEN_STORE_PATH` | `~/.mux/tokens.json` | Path to OAuth token cache |
 | `MUX_DEFAULT_IDLE_TIMEOUT` | `300000` | Default idle timeout in ms (5 min) |

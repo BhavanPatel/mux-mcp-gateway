@@ -18,6 +18,7 @@ const schema = `{
 
 const envVars = [
   { name: "MUX_LOG_LEVEL", default: "info", desc: "error | warn | info | debug" },
+  { name: "MUX_LOG_TO_FILE", default: "false", desc: "Write logs to ~/.mux/mux.log" },
   { name: "MUX_REGISTRY_PATH", default: "~/.mux/servers.json", desc: "Path to registry" },
   { name: "MUX_TOKEN_STORE_PATH", default: "~/.mux/tokens.json", desc: "OAuth token cache" },
   { name: "MUX_DEFAULT_IDLE_TIMEOUT", default: "300000", desc: "Idle timeout (ms)" },
