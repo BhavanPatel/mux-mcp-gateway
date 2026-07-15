@@ -62,7 +62,9 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
     const isUnauthorized =
       err instanceof UnauthorizedError ||
       err.constructor?.name === 'UnauthorizedError' ||
-      err.message?.includes('Unauthorized');
+      err.message?.includes('Unauthorized') ||
+      err.message?.includes('HTTP 401') ||
+      err.message?.includes('401');
 
     if (!isUnauthorized) {
       // Not an auth error — propagate the real error
@@ -101,7 +103,9 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
       const isAuthErr =
         authErr instanceof UnauthorizedError ||
         authErr.constructor?.name === 'UnauthorizedError' ||
-        authErr.message?.includes('Unauthorized');
+        authErr.message?.includes('Unauthorized') ||
+        authErr.message?.includes('HTTP 401') ||
+        authErr.message?.includes('401');
 
       if (!isAuthErr) throw authErr;
 
