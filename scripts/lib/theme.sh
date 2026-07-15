@@ -84,11 +84,11 @@ _check_version_update() {
     local current="$1"
     local cache_dir="$HOME/.mux"
     local cache_file="$cache_dir/version-check.json"
-    local cache_ttl=3600  # 1 hour
+    local cache_ttl=300  # 5 minutes
 
     mkdir -p "$cache_dir"
 
-    # Check if cache is fresh
+    # Check if cache is fresh AND was checked from the same local version
     local latest=""
     if [[ -f "$cache_file" ]]; then
         local cache_age=0
@@ -97,16 +97,19 @@ _check_version_update() {
         else
             cache_age=$(( $(date +%s) - $(stat -c %Y "$cache_file") ))
         fi
-        if [[ "$cache_age" -lt "$cache_ttl" ]]; then
+        # Cache is valid only if fresh AND checked from same version
+        local cached_from
+        cached_from=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('from',''))" "$cache_file" 2>/dev/null)
+        if [[ "$cache_age" -lt "$cache_ttl" && "$cached_from" == "$current" ]]; then
             latest=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('latest',''))" "$cache_file" 2>/dev/null)
         fi
     fi
 
-    # Fetch latest if cache is stale
+    # Fetch latest if cache is stale or version changed
     if [[ -z "$latest" ]]; then
         latest=$(npm view mux-mcp-gateway version 2>/dev/null || echo "")
         if [[ -n "$latest" ]]; then
-            echo "{\"latest\":\"$latest\",\"checked\":$(date +%s)}" > "$cache_file"
+            echo "{\"latest\":\"$latest\",\"from\":\"$current\",\"checked\":$(date +%s)}" > "$cache_file"
         fi
     fi
 

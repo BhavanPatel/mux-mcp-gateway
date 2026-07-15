@@ -28,5 +28,9 @@ cmd_update() {
     else
         ok "${C_GREEN}Mux updated!${C_RESET} ${current_version} → ${new_version}"
     fi
+
+    # Clear version cache so next startup shows correct info
+    rm -f "$HOME/.mux/version-check.json"
+
     echo ""
 }
