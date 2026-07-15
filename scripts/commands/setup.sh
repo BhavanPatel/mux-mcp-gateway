@@ -78,7 +78,7 @@ cmd_setup() {
     fi
 
     ensure_registry
-    ok "Token store: ${C_GRAY}~/.mux/tokens.json${C_RESET} (chmod 600)"
+    ok "Token store: ${C_GRAY}~/.mux/tokens.json${C_RESET} (AES-256-GCM encrypted)"
 
     # Step 4: Client integration
     step "Step 4/5: Client integration"

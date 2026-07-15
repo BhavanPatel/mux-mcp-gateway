@@ -36,7 +36,10 @@ function readTokens() {
     // Encrypted format
     if (parsed.v === 1 && parsed.enc && parsed.iv && parsed.tag) {
       const salt = getSalt();
-      if (!salt) return {};
+      if (!salt) {
+        process.stderr.write('[read-tokens] ERROR: no .salt file found\n');
+        return {};
+      }
       const key = deriveKey(salt);
       const iv = Buffer.from(parsed.iv, 'base64');
       const tag = Buffer.from(parsed.tag, 'base64');
@@ -48,7 +51,8 @@ function readTokens() {
     }
     // Plain JSON (legacy/not yet migrated)
     return parsed;
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[read-tokens] ERROR: ${err.message}\n`);
     return {};
   }
 }

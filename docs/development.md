@@ -68,7 +68,7 @@ mux/
 │   │
 │   └── auth/
 │       ├── mcp-oauth-provider.ts # OAuthClientProvider — browser flow + token cache
-│       ├── token-store.ts       # Read/write ~/.mux/tokens.json (chmod 600)
+│       ├── token-store.ts       # Read/write ~/.mux/tokens.json (AES-256-GCM encrypted)
 │       └── oauth.ts             # Legacy manual OAuth (fallback)
 │
 ├── scripts/

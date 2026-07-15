@@ -57,7 +57,7 @@ graph TB
 | **Stdio Transport** | `src/transport/stdio.ts` | Spawns downstream processes, communicates via stdin/stdout |
 | **HTTP Transport** | `src/transport/http.ts` | Connects to HTTP/SSE endpoints with MCP OAuth provider |
 | **OAuth Provider** | `src/auth/mcp-oauth-provider.ts` | Browser-based OAuth (same flow as Kiro IDE/CLI) |
-| **Token Store** | `src/auth/token-store.ts` | Reads/writes `~/.mux/tokens.json`, checks expiry |
+| **Token Store** | `src/auth/token-store.ts` | Reads/writes encrypted `~/.mux/tokens.json`, checks expiry |
 | **Logger** | `src/logger.ts` | Structured stderr logging with levels |
 
 ### Data Flow

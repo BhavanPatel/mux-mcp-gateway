@@ -26,7 +26,7 @@ cmd_status() {
 
     if [[ -f "$TOKENS" ]]; then
         local tc
-        tc=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$TOKENS" 2>/dev/null || echo "0")
+        tc=$(node "$SCRIPT_DIR/scripts/lib/read-tokens.mjs" --list-authed 2>/dev/null | wc -l | tr -d ' ')
         info "Tokens: ${C_WHITE}${tc}${C_RESET} cached"
     fi
     echo ""

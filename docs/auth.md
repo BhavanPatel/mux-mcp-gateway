@@ -67,7 +67,7 @@ Most HTTP MCP servers (GitLab, Jira, Slack, ServiceNow, Datadog, Sitecore) use t
 
 Mux now detects externally-completed authorization immediately:
 
-- **Token file polling** — While waiting for the OAuth callback, Mux polls `~/.mux/tokens.json` every 1s. If tokens appear (e.g., from a redirect flow that writes directly), it resolves immediately without waiting for the callback.
+- **Token file polling** — While waiting for the OAuth callback, Mux monitors `~/.mux/tokens.json` for modifications. If the file changes (e.g., from a redirect flow that writes directly), it resolves immediately without waiting for the callback.
 - **Countdown timer** — During the auth wait, a countdown is displayed to stderr so you can see how much time remains:
   ```
   [MUX] ⏳ Waiting for "sitecore" authorization... 95s remaining

@@ -149,7 +149,7 @@ This means:
 - No shared credential store to secure
 - No multi-tenancy complexity
 - No token management service needed
-- OAuth tokens persist in `~/.mux/tokens.json` (chmod 600, user-only)
+- OAuth tokens persist in `~/.mux/tokens.json` (AES-256-GCM encrypted, 0600 permissions)
 
 ---
 

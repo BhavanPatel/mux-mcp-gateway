@@ -127,6 +127,17 @@ print(c.get('url','') if c.get('transport')=='http' else 'NOT_HTTP')
     local elapsed=0
     local has_token="no"
     local timeout=120
+    local token_file="$HOME/.mux/tokens.json"
+    # Record initial mtime (or 0 if file doesn't exist)
+    local start_mtime=0
+    if [[ -f "$token_file" ]]; then
+        if [[ "$(uname)" == "Darwin" ]]; then
+            start_mtime=$(stat -f %m "$token_file")
+        else
+            start_mtime=$(stat -c %Y "$token_file")
+        fi
+    fi
+
     while [[ $elapsed -lt $timeout ]]; do
         sleep 1
         elapsed=$((elapsed + 1))
@@ -134,12 +145,22 @@ print(c.get('url','') if c.get('transport')=='http' else 'NOT_HTTP')
         # Print countdown timer (overwrite same line)
         printf "\r  ${C_GRAY}⏳ Waiting for authorization... ${C_WHITE}%3ds${C_GRAY} remaining${C_RESET}" "$remaining"
 
-        has_token=$(node "$SCRIPT_DIR/scripts/lib/read-tokens.mjs" "$name")
-        if [[ "$has_token" == "yes" ]]; then
-            # Clear timer line
-            printf "\r\033[K"
-            break
+        # Check if token file was modified (no decryption needed)
+        if [[ -f "$token_file" ]]; then
+            local current_mtime=0
+            if [[ "$(uname)" == "Darwin" ]]; then
+                current_mtime=$(stat -f %m "$token_file")
+            else
+                current_mtime=$(stat -c %Y "$token_file")
+            fi
+            if [[ "$current_mtime" -gt "$start_mtime" ]]; then
+                has_token="yes"
+                # Clear timer line
+                printf "\r\033[K"
+                break
+            fi
         fi
+
         # Also break if process already exited
         if ! kill -0 $pid 2>/dev/null; then
             printf "\r\033[K"
