@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.0] — 2026-07-15
+
+### Fixed
+- **False auth detection** — HTTP servers that don't support OAuth (API-key-based, internal services) no longer trigger the 120s auth timeout. Mux now probes `/.well-known/oauth-authorization-server` before starting the OAuth flow.
+- **Auth timeout ignoring completed auth** — Token file polling now detects externally-completed authorization immediately instead of waiting the full 120s timeout.
+
+### Added
+- **Countdown timer** — Auth wait displays remaining seconds to stderr so users can see how long until timeout.
+- OAuth discovery probe test suite (`test/test-auth-discovery.mjs`)
+
 ## [1.0.2] — 2026-07-03
 
 ### Changed

@@ -34,7 +34,7 @@ export function createServer(): McpServer {
     async () => {
       const currentRegistry = getRegistry();
       const activeStatus = getPoolStatus();
-      const activeMap = new Map(activeStatus.map(entry => [entry.name, entry]));
+      const activeMap = new Map(activeStatus.map((entry) => [entry.name, entry]));
 
       const servers = Object.entries(currentRegistry.servers).map(([name, config]) => {
         const activeEntry = activeMap.get(name);
@@ -44,11 +44,7 @@ export function createServer(): McpServer {
           transport: config.transport,
           keywords: config.keywords || [],
           status: activeEntry ? 'active' : 'idle',
-          tools: activeEntry
-            ? activeEntry.tools
-            : cachedTools
-              ? cachedTools.map(tool => tool.name)
-              : undefined,
+          tools: activeEntry ? activeEntry.tools : cachedTools ? cachedTools.map((tool) => tool.name) : undefined,
           idleMs: activeEntry ? activeEntry.idleMs : undefined,
         };
       });
@@ -56,7 +52,7 @@ export function createServer(): McpServer {
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(servers, null, 2) }],
       };
-    }
+    },
   );
 
   // Tool 2: Route a tool call
@@ -64,7 +60,10 @@ export function createServer(): McpServer {
     'mux_call_tool',
     `Route a tool call to a downstream MCP server. The server will be started automatically if not already running. If "server" is omitted, Mux will attempt to auto-resolve which server owns the tool from cached tool metadata. Available servers: ${serverList || 'none yet'}.`,
     {
-      server: z.string().optional().describe('Name of the downstream server. Optional — if omitted, Mux auto-resolves from cached tool names.'),
+      server: z
+        .string()
+        .optional()
+        .describe('Name of the downstream server. Optional — if omitted, Mux auto-resolves from cached tool names.'),
       tool: z.string().describe('Name of the tool to call on that server'),
       arguments: z.record(z.unknown()).optional().default({}).describe('Arguments to pass to the tool'),
     },
@@ -73,17 +72,27 @@ export function createServer(): McpServer {
         const resolvedServer = serverName || resolveServerByToolName(toolName);
         if (!resolvedServer) {
           return {
-            content: [{ type: 'text' as const, text: `Cannot resolve server for tool "${toolName}". No server specified and tool not found in cache. Use mux_find_tool to search available tools, or specify the server explicitly.` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `Cannot resolve server for tool "${toolName}". No server specified and tool not found in cache. Use mux_find_tool to search available tools, or specify the server explicitly.`,
+              },
+            ],
             isError: true,
           };
         }
 
         const entry = await getOrConnect(resolvedServer);
-        const toolExists = entry.tools.some(tool => tool.name === toolName);
+        const toolExists = entry.tools.some((tool) => tool.name === toolName);
         if (!toolExists) {
-          const available = entry.tools.map(tool => tool.name).join(', ');
+          const available = entry.tools.map((tool) => tool.name).join(', ');
           return {
-            content: [{ type: 'text' as const, text: `Tool "${toolName}" not found on server "${resolvedServer}". Available tools: ${available}` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `Tool "${toolName}" not found on server "${resolvedServer}". Available tools: ${available}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -97,7 +106,7 @@ export function createServer(): McpServer {
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 3: Search for tools across all cached servers
@@ -112,14 +121,19 @@ export function createServer(): McpServer {
 
       if (results.length === 0) {
         return {
-          content: [{ type: 'text' as const, text: `No tools found matching "${query}". Note: only previously-connected servers have cached tools. Use mux_list_servers to see all servers, then call any tool on a server to populate its cache.` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `No tools found matching "${query}". Note: only previously-connected servers have cached tools. Use mux_list_servers to see all servers, then call any tool on a server to populate its cache.`,
+            },
+          ],
         };
       }
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }],
       };
-    }
+    },
   );
 
   // Tool 4: Diagnostics
@@ -139,7 +153,7 @@ export function createServer(): McpServer {
         uptime: `${Math.floor((Date.now() - startTime) / MS_PER_SECOND)}s`,
         registeredServers: Object.keys(currentRegistry.servers).length,
         activeConnections: activeConnections.length,
-        activeServers: activeConnections.map(connection => ({
+        activeServers: activeConnections.map((connection) => ({
           name: connection.name,
           tools: connection.tools,
           idleFor: `${Math.floor(connection.idleMs / MS_PER_SECOND)}s`,
@@ -165,7 +179,7 @@ export function createServer(): McpServer {
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(status, null, 2) }],
       };
-    }
+    },
   );
 
   return server;

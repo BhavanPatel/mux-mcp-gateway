@@ -1,0 +1,44 @@
+#!/bin/bash
+# Pre-push hook: runs build, lint, format check, and tests before allowing push
+set -e
+
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+
+echo ""
+echo "  [pre-push] Running prechecks before push..."
+echo ""
+
+# Build
+echo "  [1/4] Building..."
+npm run build > /dev/null 2>&1
+echo "        ✔ Build passed"
+
+# Lint
+echo "  [2/4] Linting..."
+npx eslint src/ --max-warnings=0 2>/dev/null || {
+  # Allow warnings but not errors
+  LINT_EXIT=$(npx eslint src/ 2>&1)
+  if echo "$LINT_EXIT" | grep -q "error"; then
+    echo "        ✖ Lint errors found. Fix before pushing."
+    exit 1
+  fi
+}
+echo "        ✔ Lint passed"
+
+# Format check
+echo "  [3/4] Checking formatting..."
+npx prettier --check 'src/**/*.ts' 'test/**/*.mjs' '*.json' '*.ts' > /dev/null 2>&1 || {
+  echo "        ✖ Formatting issues found. Run: npm run format"
+  exit 1
+}
+echo "        ✔ Format check passed"
+
+# Tests (unit + e2e)
+echo "  [4/4] Running tests..."
+npm run test:ci > /dev/null 2>&1
+echo "        ✔ Tests passed"
+
+echo ""
+echo "  ✔ All prechecks passed. Pushing..."
+echo ""

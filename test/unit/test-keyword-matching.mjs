@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
+const ROOT = resolve(__dirname, '../..');
 const TEST_DIR = '/tmp/mux-keyword-test';
 const REGISTRY_PATH = resolve(TEST_DIR, 'servers.json');
 
@@ -19,40 +19,47 @@ before(async () => {
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
   mkdirSync(TEST_DIR, { recursive: true });
 
-  writeFileSync(REGISTRY_PATH, JSON.stringify({
-    servers: {
-      'gitlab': {
-        transport: 'stdio',
-        command: 'echo',
-        args: [],
-        keywords: ['gitlab', 'merge request', 'MR', 'pipeline', 'branch', 'repository', 'commit']
+  writeFileSync(
+    REGISTRY_PATH,
+    JSON.stringify(
+      {
+        servers: {
+          gitlab: {
+            transport: 'stdio',
+            command: 'echo',
+            args: [],
+            keywords: ['gitlab', 'merge request', 'MR', 'pipeline', 'branch', 'repository', 'commit'],
+          },
+          'jira-cloud': {
+            transport: 'stdio',
+            command: 'echo',
+            args: [],
+            keywords: ['jira', 'issues', 'sprint', 'board', 'backlog', 'ticket', 'story'],
+          },
+          'elasticsearch-prod': {
+            transport: 'stdio',
+            command: 'echo',
+            args: [],
+            keywords: ['elasticsearch', 'kibana', 'logs', 'search', 'index', 'query'],
+          },
+          datadog: {
+            transport: 'stdio',
+            command: 'echo',
+            args: [],
+            keywords: ['datadog', 'metrics', 'traces', 'APM', 'monitors', 'dashboards'],
+          },
+          'slack-mcp': {
+            transport: 'stdio',
+            command: 'echo',
+            args: [],
+            keywords: ['slack', 'channels', 'messages', 'notifications'],
+          },
+        },
       },
-      'jira-cloud': {
-        transport: 'stdio',
-        command: 'echo',
-        args: [],
-        keywords: ['jira', 'issues', 'sprint', 'board', 'backlog', 'ticket', 'story']
-      },
-      'elasticsearch-prod': {
-        transport: 'stdio',
-        command: 'echo',
-        args: [],
-        keywords: ['elasticsearch', 'kibana', 'logs', 'search', 'index', 'query']
-      },
-      'datadog': {
-        transport: 'stdio',
-        command: 'echo',
-        args: [],
-        keywords: ['datadog', 'metrics', 'traces', 'APM', 'monitors', 'dashboards']
-      },
-      'slack-mcp': {
-        transport: 'stdio',
-        command: 'echo',
-        args: [],
-        keywords: ['slack', 'channels', 'messages', 'notifications']
-      }
-    }
-  }, null, 2));
+      null,
+      2,
+    ),
+  );
 
   process.env.MUX_REGISTRY_PATH = REGISTRY_PATH;
   process.env.MUX_LOG_LEVEL = 'error';

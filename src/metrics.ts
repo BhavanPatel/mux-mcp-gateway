@@ -95,17 +95,17 @@ export interface AggregatedMetrics {
 }
 
 function aggregate(since: number): Omit<AggregatedMetrics, 'period'> {
-  const events = store.events.filter(e => e.ts >= since);
+  const events = store.events.filter((e) => e.ts >= since);
 
-  const calls = events.filter(e => e.type === 'call');
-  const spawns = events.filter(e => e.type === 'spawn');
-  const kills = events.filter(e => e.type === 'kill');
-  const authHits = events.filter(e => e.type === 'auth_hit');
-  const authRefreshes = events.filter(e => e.type === 'auth_refresh');
-  const authFlows = events.filter(e => e.type === 'auth_flow');
-  const errors = events.filter(e => e.type === 'error');
+  const calls = events.filter((e) => e.type === 'call');
+  const spawns = events.filter((e) => e.type === 'spawn');
+  const kills = events.filter((e) => e.type === 'kill');
+  const authHits = events.filter((e) => e.type === 'auth_hit');
+  const authRefreshes = events.filter((e) => e.type === 'auth_refresh');
+  const authFlows = events.filter((e) => e.type === 'auth_flow');
+  const errors = events.filter((e) => e.type === 'error');
 
-  const durations = calls.filter(e => e.durationMs).map(e => e.durationMs!);
+  const durations = calls.filter((e) => e.durationMs).map((e) => e.durationMs!);
   const avgResponseMs = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
 
   // Top servers by call count
@@ -120,14 +120,11 @@ function aggregate(since: number): Omit<AggregatedMetrics, 'period'> {
 
   // Context reduction: without Mux all downstream tools are in context.
   // With Mux only 4 tools are exposed. Calculate % reduction from spawn toolCounts.
-  const spawnToolCounts = spawns.filter(e => e.toolCount).map(e => e.toolCount!);
-  const totalDownstreamTools = spawnToolCounts.length > 0
-    ? spawnToolCounts.reduce((a, b) => a + b, 0)
-    : 0;
+  const spawnToolCounts = spawns.filter((e) => e.toolCount).map((e) => e.toolCount!);
+  const totalDownstreamTools = spawnToolCounts.length > 0 ? spawnToolCounts.reduce((a, b) => a + b, 0) : 0;
   const muxTools = 4;
-  const contextReductionPct = totalDownstreamTools > muxTools
-    ? Math.round((1 - muxTools / totalDownstreamTools) * 100)
-    : 0;
+  const contextReductionPct =
+    totalDownstreamTools > muxTools ? Math.round((1 - muxTools / totalDownstreamTools) * 100) : 0;
 
   // Tokens saved estimate: ~200 tokens per tool definition, per message round-trip
   const tokensPerTool = 200;
@@ -178,7 +175,7 @@ export function getQuickStats(): {
 export function pruneOldEvents(): void {
   const cutoff = Date.now() - 180 * 86400_000;
   const before = store.events.length;
-  store.events = store.events.filter(e => e.ts >= cutoff);
+  store.events = store.events.filter((e) => e.ts >= cutoff);
   if (store.events.length < before) {
     dirty = true;
     persist();

@@ -11,51 +11,120 @@ export interface HttpDownstreamConnection {
   tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
 }
 
+/**
+ * Probe the server's OAuth discovery endpoint.
+ * Returns true if the server supports OAuth (has .well-known/oauth-authorization-server).
+ */
+async function hasOAuthDiscovery(serverUrl: string): Promise<boolean> {
+  try {
+    const url = new URL(serverUrl);
+    const discoveryUrl = `${url.origin}/.well-known/oauth-authorization-server`;
+    const response = await fetch(discoveryUrl, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (response.ok) {
+      const body = await response.json();
+      // Validate it's actual OAuth metadata (must have authorization_endpoint)
+      return !!(body && body.authorization_endpoint);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export async function connectHttp(name: string, config: ServerConfig): Promise<HttpDownstreamConnection> {
   if (!config.url) throw new Error(`Server "${name}" missing url`);
 
   logger.info(`Connecting HTTP downstream: ${name}`, { url: config.url });
 
-  const authProvider = new MuxOAuthProvider(name, {
-    clientId: config.auth?.clientId,
-    scopes: config.auth?.scopes,
+  // --- Phase 1: Try connecting WITHOUT auth provider first ---
+  // This avoids false auth detection for servers that don't need OAuth
+  const transportNoAuth = new StreamableHTTPClientTransport(new URL(config.url), {
+    requestInit: { headers: config.headers || {} },
   });
-
-  const transport = new StreamableHTTPClientTransport(
-    new URL(config.url),
-    {
-      authProvider,
-      requestInit: { headers: config.headers || {} },
-    }
-  );
-
-  const client = new Client({ name: `mux->${name}`, version: '0.1.0' });
+  const clientNoAuth = new Client({ name: `mux->${name}`, version: '0.1.0' });
 
   try {
-    await client.connect(transport);
+    await clientNoAuth.connect(transportNoAuth);
+    const { tools } = await clientNoAuth.listTools();
+    logger.info(`Connected to ${name} (HTTP, no auth): ${tools.length} tools available`);
+    return { client: clientNoAuth, transport: transportNoAuth, tools };
   } catch (err: any) {
-    if (err instanceof UnauthorizedError || err.constructor?.name === 'UnauthorizedError' || err.message?.includes('Unauthorized')) {
+    // Clean up failed no-auth transport
+    try {
+      await transportNoAuth.close();
+    } catch {
+      /* ignore */
+    }
+
+    const isUnauthorized =
+      err instanceof UnauthorizedError ||
+      err.constructor?.name === 'UnauthorizedError' ||
+      err.message?.includes('Unauthorized');
+
+    if (!isUnauthorized) {
+      // Not an auth error — propagate the real error
+      throw err;
+    }
+
+    // --- Phase 2: Got 401 — check if server actually supports OAuth ---
+    logger.info(`Server "${name}" returned 401. Probing OAuth discovery...`);
+    const supportsOAuth = await hasOAuthDiscovery(config.url);
+
+    if (!supportsOAuth) {
+      throw new Error(
+        `Server "${name}" returned 401 but does not have an OAuth discovery endpoint. ` +
+          `Check your headers/API keys in servers.json, or the server may require a different auth mechanism.`,
+      );
+    }
+
+    // --- Phase 3: Server supports OAuth — do the full auth flow ---
+    logger.info(`OAuth discovery confirmed for "${name}", starting authorization flow...`);
+
+    const authProvider = new MuxOAuthProvider(name, {
+      clientId: config.auth?.clientId,
+      scopes: config.auth?.scopes,
+    });
+
+    const transport = new StreamableHTTPClientTransport(new URL(config.url), {
+      authProvider,
+      requestInit: { headers: config.headers || {} },
+    });
+
+    const client = new Client({ name: `mux->${name}`, version: '0.1.0' });
+
+    try {
+      await client.connect(transport);
+    } catch (authErr: any) {
+      const isAuthErr =
+        authErr instanceof UnauthorizedError ||
+        authErr.constructor?.name === 'UnauthorizedError' ||
+        authErr.message?.includes('Unauthorized');
+
+      if (!isAuthErr) throw authErr;
+
       logger.info(`OAuth flow triggered for "${name}", waiting for browser authorization...`);
 
-      // The authProvider.redirectToAuthorization() was called by the SDK,
-      // which started the callback server and opened the browser.
-      // Wait for the user to authorize — the callback server will resolve with the code.
+      // Wait for the user to authorize — callback server or token polling will resolve
       const code = await authProvider.waitForAuthCode();
 
       if (code) {
-        logger.info(`Auth code received for "${name}", exchanging for token...`);
-        // Tell the transport about the auth code so it can exchange for tokens
-        await transport.finishAuth(code);
+        // If token was saved externally (redirect flow), skip finishAuth
+        if (code === '__TOKEN_ALREADY_SAVED__') {
+          logger.info(`Token already saved for "${name}" (external auth flow), reconnecting...`);
+        } else {
+          logger.info(`Auth code received for "${name}", exchanging for token...`);
+          await transport.finishAuth(code);
+        }
 
         // Retry connection with the new token
         const client2 = new Client({ name: `mux->${name}`, version: '0.1.0' });
-        const transport2 = new StreamableHTTPClientTransport(
-          new URL(config.url),
-          {
-            authProvider,
-            requestInit: { headers: config.headers || {} },
-          }
-        );
+        const transport2 = new StreamableHTTPClientTransport(new URL(config.url), {
+          authProvider,
+          requestInit: { headers: config.headers || {} },
+        });
         await client2.connect(transport2);
 
         const { tools } = await client2.listTools();
@@ -65,13 +134,11 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
 
       throw new Error(`Authorization for "${name}" was not completed.`);
     }
-    throw err;
+
+    const { tools } = await client.listTools();
+    logger.info(`Connected to ${name} (HTTP): ${tools.length} tools available`);
+    return { client, transport, tools };
   }
-
-  const { tools } = await client.listTools();
-  logger.info(`Connected to ${name} (HTTP): ${tools.length} tools available`);
-
-  return { client, transport, tools };
 }
 
 export async function disconnectHttp(conn: HttpDownstreamConnection): Promise<void> {

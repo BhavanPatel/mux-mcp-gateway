@@ -10,7 +10,7 @@ import { writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
+const ROOT = resolve(__dirname, '../..');
 const CACHE_DIR = resolve(homedir(), '.mux');
 const CATALOG_PATH = resolve(CACHE_DIR, 'tool-catalog.json');
 
@@ -27,7 +27,7 @@ before(async () => {
   if (!existsSync(CACHE_DIR)) mkdirSync(CACHE_DIR, { recursive: true });
 
   const testCatalog = {
-    'gitlab': {
+    gitlab: {
       tools: [
         { name: 'list_merge_requests', description: 'List merge requests for a project' },
         { name: 'create_merge_request', description: 'Create a new merge request' },
@@ -56,9 +56,7 @@ before(async () => {
       discoveredAt: Date.now(),
     },
     'expired-server': {
-      tools: [
-        { name: 'expired_tool', description: 'This should not be returned' },
-      ],
+      tools: [{ name: 'expired_tool', description: 'This should not be returned' }],
       discoveredAt: Date.now() - 7_200_000, // 2 hours ago (beyond 1hr TTL)
     },
   };
@@ -99,23 +97,23 @@ describe('findToolsAcrossServers', () => {
     it('finds tools containing query substring', () => {
       const results = findToolsAcrossServers('merge');
       assert.ok(results.length >= 2);
-      assert.ok(results.some(r => r.tool === 'list_merge_requests'));
-      assert.ok(results.some(r => r.tool === 'create_merge_request'));
+      assert.ok(results.some((r) => r.tool === 'list_merge_requests'));
+      assert.ok(results.some((r) => r.tool === 'create_merge_request'));
     });
 
     it('finds tools by word part', () => {
       const results = findToolsAcrossServers('issue');
       assert.ok(results.length >= 3);
-      assert.ok(results.some(r => r.tool === 'search_issues'));
-      assert.ok(results.some(r => r.tool === 'create_issue'));
-      assert.ok(results.some(r => r.tool === 'get_issue'));
+      assert.ok(results.some((r) => r.tool === 'search_issues'));
+      assert.ok(results.some((r) => r.tool === 'create_issue'));
+      assert.ok(results.some((r) => r.tool === 'get_issue'));
     });
 
     it('finds tools by prefix', () => {
       const results = findToolsAcrossServers('list');
       assert.ok(results.length >= 2);
-      assert.ok(results.some(r => r.tool === 'list_merge_requests'));
-      assert.ok(results.some(r => r.tool === 'list_branches'));
+      assert.ok(results.some((r) => r.tool === 'list_merge_requests'));
+      assert.ok(results.some((r) => r.tool === 'list_branches'));
     });
   });
 
@@ -123,7 +121,7 @@ describe('findToolsAcrossServers', () => {
     it('matches against tool description when name does not match', () => {
       const results = findToolsAcrossServers('CI/CD');
       assert.ok(results.length > 0);
-      assert.ok(results.some(r => r.tool === 'get_pipeline_status'));
+      assert.ok(results.some((r) => r.tool === 'get_pipeline_status'));
     });
 
     it('finds tools by description keyword', () => {
@@ -136,7 +134,7 @@ describe('findToolsAcrossServers', () => {
   describe('cross-server results', () => {
     it('returns results from multiple servers', () => {
       const results = findToolsAcrossServers('search');
-      const servers = [...new Set(results.map(r => r.server))];
+      const servers = [...new Set(results.map((r) => r.server))];
       assert.ok(servers.length >= 2, `Expected results from multiple servers, got: ${servers}`);
     });
 

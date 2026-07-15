@@ -18,6 +18,15 @@
     "dev": "tsup --watch",
     "start": "node dist/index.js",
     "test": "bash test/test.sh",
+    "test:unit": "node --test ./test/unit/test-*.mjs ./test/auth/test-*.mjs",
+    "test:e2e": "node test/e2e/test-mcp.mjs && node test/e2e/test-pool.mjs",
+    "test:ci": "npm run test:unit && npm run test:e2e",
+    "test:coverage": "c8 --reporter=text --reporter=text-summary --reporter=lcov --exclude='node_modules/**' npm run test:ci",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write 'src/**/*.ts' 'test/**/*.mjs' '*.json' '*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.mjs' '*.json' '*.ts'",
+    "precheck": "npm run build && npm run lint && npm run format:check && npm run test:ci",
     "prepare": "git config core.hooksPath .hooks",
     "prepublishOnly": "npm run build",
     "install-cli": "npm install && npm run build && npm link"
@@ -52,8 +61,14 @@
     "@modelcontextprotocol/sdk": "1.12.1"
   },
   "devDependencies": {
-    "typescript": "5.7.3",
+    "@eslint/js": "^9.7.0",
+    "@types/node": "22.10.5",
+    "c8": "^10.1.2",
+    "eslint": "^9.7.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.3",
     "tsup": "8.3.5",
-    "@types/node": "22.10.5"
+    "typescript": "5.7.3",
+    "typescript-eslint": "^8.0.0"
   }
 }

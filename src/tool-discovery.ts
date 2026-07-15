@@ -31,9 +31,7 @@ interface ScoredResult extends ToolSearchResult {
  */
 export function findToolsAcrossServers(query: string): ToolSearchResult[] {
   const normalizedQuery = query.toLowerCase();
-  const queryParts = normalizedQuery
-    .split(/[\s_\-./]+/)
-    .filter(part => part.length >= MIN_QUERY_PART_LENGTH);
+  const queryParts = normalizedQuery.split(/[\s_\-./]+/).filter((part) => part.length >= MIN_QUERY_PART_LENGTH);
 
   const results: ScoredResult[] = [];
 
@@ -58,18 +56,14 @@ export function resolveServerByToolName(toolName: string): string | undefined {
   const normalizedToolName = toolName.toLowerCase();
 
   for (const { serverName, tools } of getAllEntries()) {
-    const match = tools.find(tool => tool.name.toLowerCase() === normalizedToolName);
+    const match = tools.find((tool) => tool.name.toLowerCase() === normalizedToolName);
     if (match) return serverName;
   }
 
   return undefined;
 }
 
-function scoreToolMatch(
-  tool: ToolSchema,
-  normalizedQuery: string,
-  queryParts: string[]
-): number {
+function scoreToolMatch(tool: ToolSchema, normalizedQuery: string, queryParts: string[]): number {
   const normalizedToolName = tool.name.toLowerCase();
   const normalizedDescription = (tool.description || '').toLowerCase();
 
@@ -111,7 +105,5 @@ function scoreWordParts(queryParts: string[], normalizedToolName: string): numbe
     }
   }
 
-  return partMatches > 0
-    ? SCORE_WORD_PART_BASE + partMatches * SCORE_WORD_PART_INCREMENT
-    : 0;
+  return partMatches > 0 ? SCORE_WORD_PART_BASE + partMatches * SCORE_WORD_PART_INCREMENT : 0;
 }

@@ -5,15 +5,17 @@ import { useRef } from "react";
 
 const steps = [
   { n: "1", text: "Tool call arrives for HTTP server" },
-  { n: "2", text: "Check ~/.mux/tokens.json for cached token" },
-  { n: "3", text: "Valid → use it. Expired → refresh. Missing → open browser" },
-  { n: "4", text: "Inject Bearer token, connect to server" },
+  { n: "2", text: "Try connecting without auth — works for API-key servers instantly" },
+  { n: "3", text: "If 401 → probe OAuth discovery endpoint on server" },
+  { n: "4", text: "OAuth found → browser auth with live countdown timer" },
+  { n: "5", text: "Token cached. Resolves immediately when auth completes." },
 ];
 
 const authTypes = [
   { type: "Env tokens", config: 'env: { "TOKEN": "${VAR}" }', behavior: "From shell environment" },
   { type: "Static headers", config: 'headers: { "X-Key": "${KEY}" }', behavior: "Injected into HTTP" },
-  { type: "OAuth (browser)", config: "Server returns 401", behavior: "Browser → authorize → cached" },
+  { type: "OAuth (browser)", config: "Server has OAuth discovery", behavior: "Browser → authorize → cached" },
+  { type: "No OAuth", config: "Server returns 401, no discovery", behavior: "Fail fast with clear error" },
 ];
 
 export default function Auth() {
@@ -33,7 +35,7 @@ export default function Auth() {
             Auth once. Cached forever.
           </h2>
           <p className="mt-3 text-sm" style={{ color: '#6b7394' }}>
-            Same flow as Kiro IDE. Tokens persist in ~/.mux/tokens.json (chmod 600).
+            Smart detection — only triggers OAuth when the server actually supports it. Live countdown timer. Instant resolution.
           </p>
         </motion.div>
 
@@ -73,7 +75,7 @@ export default function Auth() {
             <span className="text-xs font-mono uppercase" style={{ color: '#6b7394' }}>Behavior</span>
           </div>
           {authTypes.map((a, i) => (
-            <div key={i} className="grid grid-cols-3 px-3 md:px-5 py-3" style={{ borderBottom: i < 2 ? '1px solid #ffffff04' : 'none' }}>
+            <div key={i} className="grid grid-cols-3 px-3 md:px-5 py-3" style={{ borderBottom: i < authTypes.length - 1 ? '1px solid #ffffff04' : 'none' }}>
               <span className="text-sm font-medium" style={{ color: '#f0f4ff' }}>{a.type}</span>
               <code className="text-xs font-mono" style={{ color: '#6b7394' }}>{a.config}</code>
               <span className="text-xs" style={{ color: '#6b7394' }}>{a.behavior}</span>

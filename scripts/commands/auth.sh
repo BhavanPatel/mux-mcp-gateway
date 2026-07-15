@@ -135,9 +135,14 @@ print(c.get('url','') if c.get('transport')=='http' else 'NOT_HTTP')
     # Poll for token every second, kill early once we have it
     local elapsed=0
     local has_token="no"
-    while [[ $elapsed -lt 120 ]]; do
+    local timeout=120
+    while [[ $elapsed -lt $timeout ]]; do
         sleep 1
         elapsed=$((elapsed + 1))
+        local remaining=$((timeout - elapsed))
+        # Print countdown timer (overwrite same line)
+        printf "\r  ${C_GRAY}⏳ Waiting for authorization... ${C_WHITE}%3ds${C_GRAY} remaining${C_RESET}" "$remaining"
+
         has_token=$(python3 -c "
 import json, sys, os
 try:
@@ -147,13 +152,18 @@ try:
 except: print('no')
 " "$name")
         if [[ "$has_token" == "yes" ]]; then
+            # Clear timer line
+            printf "\r\033[K"
             break
         fi
         # Also break if process already exited
         if ! kill -0 $pid 2>/dev/null; then
+            printf "\r\033[K"
             break
         fi
     done
+    # Clear timer line if we hit timeout
+    [[ "$has_token" != "yes" ]] && printf "\r\033[K"
 
     # Kill mux process
     kill $pid 2>/dev/null; wait $pid 2>/dev/null || true

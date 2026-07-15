@@ -1,9 +1,14 @@
 import { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
-import type { OAuthClientMetadata, OAuthClientInformation, OAuthTokens, OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+import type {
+  OAuthClientMetadata,
+  OAuthClientInformation,
+  OAuthTokens,
+  OAuthClientInformationFull,
+} from '@modelcontextprotocol/sdk/shared/auth.js';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { exec } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from '../logger.js';
 
@@ -23,7 +28,11 @@ function ensureDir() {
 }
 
 function readJson(path: string): Record<string, any> {
-  try { return JSON.parse(readFileSync(path, 'utf-8')); } catch { return {}; }
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  } catch {
+    return {};
+  }
 }
 
 function writeJson(path: string, data: any) {
@@ -57,16 +66,97 @@ export class MuxOAuthProvider implements OAuthClientProvider {
   }
 
   /**
-   * Wait for the auth code from the browser callback.
-   * Called by http.ts after catching UnauthorizedError.
+   * Wait for the auth code from the browser callback OR token file update.
+   * Polls tokens.json every 1s so externally-completed auth (redirects that
+   * write tokens directly) resolves immediately without waiting full timeout.
+   * Also prints a countdown timer to stderr.
    */
   async waitForAuthCode(): Promise<string | null> {
     if (!this._authCodePromise) return null;
+
+    // Race: callback server vs token-file polling
+    const tokenPollingPromise = this._pollForTokenCompletion();
+
     try {
-      return await this._authCodePromise;
+      const result = await Promise.race([this._authCodePromise, tokenPollingPromise]);
+      // Stop the polling if callback won
+      this._stopPolling();
+      this._stopCountdown();
+      return result;
     } catch {
+      this._stopPolling();
+      this._stopCountdown();
       return null;
     }
+  }
+
+  private _pollingInterval: ReturnType<typeof setInterval> | null = null;
+  private _countdownInterval: ReturnType<typeof setInterval> | null = null;
+
+  private _stopPolling(): void {
+    if (this._pollingInterval) {
+      clearInterval(this._pollingInterval);
+      this._pollingInterval = null;
+    }
+  }
+
+  private _stopCountdown(): void {
+    if (this._countdownInterval) {
+      clearInterval(this._countdownInterval);
+      this._countdownInterval = null;
+      // Clear the timer line
+      process.stderr.write('\r\x1b[K');
+    }
+  }
+
+  /**
+   * Poll tokens.json every 1s. If a valid token appears for this server,
+   * resolve with a sentinel value indicating auth completed externally.
+   * Also drives the countdown timer output.
+   */
+  private _pollForTokenCompletion(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const AUTH_TIMEOUT_S = 120;
+      let remaining = AUTH_TIMEOUT_S;
+
+      // Print initial countdown
+      process.stderr.write(
+        `\r\x1b[K[MUX] ⏳ Waiting for "${this.serverName}" authorization... ${remaining}s remaining`,
+      );
+
+      this._countdownInterval = setInterval(() => {
+        remaining--;
+        if (remaining >= 0) {
+          process.stderr.write(
+            `\r\x1b[K[MUX] ⏳ Waiting for "${this.serverName}" authorization... ${remaining}s remaining`,
+          );
+        }
+      }, 1000);
+
+      this._pollingInterval = setInterval(() => {
+        try {
+          const store = readJson(TOKEN_PATH);
+          const entry = store[this.serverName];
+          if (entry && (entry.access_token || entry.accessToken)) {
+            // Token appeared — auth completed externally (redirect flow)
+            this._stopPolling();
+            this._stopCountdown();
+            process.stderr.write(`\r\x1b[K[MUX] ✔ Authorization for "${this.serverName}" detected (token received)\n`);
+            // Return special sentinel — http.ts will see this and skip finishAuth
+            resolve('__TOKEN_ALREADY_SAVED__');
+          }
+        } catch {
+          // Ignore read errors, keep polling
+        }
+      }, 1000);
+
+      // Timeout fallback — reject after AUTH_TIMEOUT_S
+      setTimeout(() => {
+        this._stopPolling();
+        this._stopCountdown();
+        reject(new Error(`Token polling timed out (${AUTH_TIMEOUT_S}s)`));
+      }, AUTH_TIMEOUT_S * 1000);
+    });
   }
 
   get redirectUrl(): string {
@@ -198,6 +288,9 @@ export class MuxOAuthProvider implements OAuthClientProvider {
 
         clearTimeout(timeout);
         this._callbackServer?.close();
+        this._stopPolling();
+        this._stopCountdown();
+        process.stderr.write(`\r\x1b[K[MUX] ✔ Authorization callback received for "${this.serverName}"\n`);
         resolve(code);
       });
 

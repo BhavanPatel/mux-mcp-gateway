@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
+const ROOT = resolve(__dirname, '../..');
 const MUX_BIN = resolve(ROOT, 'dist/index.js');
 const TEST_DIR = '/tmp/mux-e2e-test';
 
@@ -22,32 +22,48 @@ const TOKENS = resolve(TEST_DIR, 'tokens.json');
 const CATALOG = resolve(TEST_DIR, 'tool-catalog.json');
 
 writeFileSync(TOKENS, '{}');
-writeFileSync(REGISTRY, JSON.stringify({
-  servers: {
-    'test-echo': {
-      transport: 'stdio',
-      command: 'node',
-      args: ['-e', `
+writeFileSync(
+  REGISTRY,
+  JSON.stringify(
+    {
+      servers: {
+        'test-echo': {
+          transport: 'stdio',
+          command: 'node',
+          args: [
+            '-e',
+            `
         const{McpServer}=require('@modelcontextprotocol/sdk/server/mcp.js');
         const{StdioServerTransport}=require('@modelcontextprotocol/sdk/server/stdio.js');
         const s=new McpServer({name:'echo',version:'1.0'});
         s.tool('ping',{},async()=>({content:[{type:'text',text:'pong'}]}));
         s.tool('echo',{msg:{type:'string'}},async({msg})=>({content:[{type:'text',text:msg}]}));
         s.connect(new StdioServerTransport());
-      `],
-      keywords: ['test', 'echo', 'ping'],
-      idleTimeoutMs: 10000
-    }
-  }
-}, null, 2));
+      `,
+          ],
+          keywords: ['test', 'echo', 'ping'],
+          idleTimeoutMs: 10000,
+        },
+      },
+    },
+    null,
+    2,
+  ),
+);
 
 // Test framework
-let pass = 0, fail = 0;
+let pass = 0,
+  fail = 0;
 const results = [];
 
 function assert(name, condition) {
-  if (condition) { pass++; results.push({ name, status: 'pass' }); }
-  else { fail++; results.push({ name, status: 'fail' }); }
+  if (condition) {
+    pass++;
+    results.push({ name, status: 'pass' });
+  } else {
+    fail++;
+    results.push({ name, status: 'fail' });
+  }
 }
 
 async function connectMux() {
@@ -81,17 +97,32 @@ try {
   console.log('  \x1b[38;5;39m━━━\x1b[0m \x1b[1m2. Tools\x1b[0m');
   const { tools } = await client.listTools();
   assert('Exposes exactly 4 tools', tools.length === 4);
-  assert('Has mux_list_servers', tools.some(t => t.name === 'mux_list_servers'));
-  assert('Has mux_call_tool', tools.some(t => t.name === 'mux_call_tool'));
-  assert('Has mux_find_tool', tools.some(t => t.name === 'mux_find_tool'));
-  assert('Has mux_status', tools.some(t => t.name === 'mux_status'));
+  assert(
+    'Has mux_list_servers',
+    tools.some((t) => t.name === 'mux_list_servers'),
+  );
+  assert(
+    'Has mux_call_tool',
+    tools.some((t) => t.name === 'mux_call_tool'),
+  );
+  assert(
+    'Has mux_find_tool',
+    tools.some((t) => t.name === 'mux_find_tool'),
+  );
+  assert(
+    'Has mux_status',
+    tools.some((t) => t.name === 'mux_status'),
+  );
 
   // 3. mux_list_servers
   console.log('  \x1b[38;5;39m━━━\x1b[0m \x1b[1m3. mux_list_servers\x1b[0m');
   const listResult = await client.callTool({ name: 'mux_list_servers', arguments: {} });
   const servers = JSON.parse(listResult.content[0].text);
   assert('Returns server array', Array.isArray(servers));
-  assert('Contains test-echo', servers.some(s => s.name === 'test-echo'));
+  assert(
+    'Contains test-echo',
+    servers.some((s) => s.name === 'test-echo'),
+  );
   assert('Shows idle status', servers[0].status === 'idle');
   assert('Shows keywords', servers[0].keywords.includes('test'));
 
@@ -110,7 +141,7 @@ try {
   console.log('  \x1b[38;5;39m━━━\x1b[0m \x1b[1m5. mux_call_tool (downstream)\x1b[0m');
   const pingResult = await client.callTool({
     name: 'mux_call_tool',
-    arguments: { server: 'test-echo', tool: 'ping', arguments: {} }
+    arguments: { server: 'test-echo', tool: 'ping', arguments: {} },
   });
   assert('Ping returns pong', pingResult.content[0].text === 'pong');
 
@@ -118,7 +149,7 @@ try {
   console.log('  \x1b[38;5;39m━━━\x1b[0m \x1b[1m6. Pool state after call\x1b[0m');
   const listAfter = await client.callTool({ name: 'mux_list_servers', arguments: {} });
   const serversAfter = JSON.parse(listAfter.content[0].text);
-  const echoServer = serversAfter.find(s => s.name === 'test-echo');
+  const echoServer = serversAfter.find((s) => s.name === 'test-echo');
   assert('Server now active', echoServer.status === 'active');
   assert('Shows tool count', typeof echoServer.tools === 'number' && echoServer.tools > 0);
 
@@ -130,7 +161,7 @@ try {
   console.log('  \x1b[38;5;39m━━━\x1b[0m \x1b[1m7. Error handling\x1b[0m');
   const errResult = await client.callTool({
     name: 'mux_call_tool',
-    arguments: { server: 'nonexistent', tool: 'foo', arguments: {} }
+    arguments: { server: 'nonexistent', tool: 'foo', arguments: {} },
   });
   assert('Unknown server returns error', errResult.isError === true);
   assert('Error mentions not found', errResult.content[0].text.includes('not found'));
@@ -138,7 +169,7 @@ try {
   // Unknown tool on known server
   const badTool = await client.callTool({
     name: 'mux_call_tool',
-    arguments: { server: 'test-echo', tool: 'nonexistent_tool', arguments: {} }
+    arguments: { server: 'test-echo', tool: 'nonexistent_tool', arguments: {} },
   });
   assert('Unknown tool returns error', badTool.isError === true);
   assert('Lists available tools', badTool.content[0].text.includes('ping'));
@@ -159,7 +190,10 @@ try {
 
   const findEcho = await client.callTool({ name: 'mux_find_tool', arguments: { query: 'echo' } });
   const echoResults = JSON.parse(findEcho.content[0].text);
-  assert('find_tool finds "echo" tool', echoResults.some(r => r.tool === 'echo'));
+  assert(
+    'find_tool finds "echo" tool',
+    echoResults.some((r) => r.tool === 'echo'),
+  );
 
   const findNothing = await client.callTool({ name: 'mux_find_tool', arguments: { query: 'nonexistent_xyz' } });
   assert('find_tool returns message for no results', findNothing.content[0].text.includes('No tools found'));
@@ -168,30 +202,31 @@ try {
   console.log('  \x1b[38;5;39m━━━\x1b[0m \x1b[1m10. Auto-routing (no server param)\x1b[0m');
   const autoResult = await client.callTool({
     name: 'mux_call_tool',
-    arguments: { tool: 'ping', arguments: {} }
+    arguments: { tool: 'ping', arguments: {} },
   });
   assert('Auto-route resolves ping to test-echo', autoResult.content[0].text === 'pong');
 
   // Verify auto-route also works for second tool on same server
   const autoResult2 = await client.callTool({
     name: 'mux_call_tool',
-    arguments: { tool: 'ping', arguments: {} }
+    arguments: { tool: 'ping', arguments: {} },
   });
   assert('Auto-route works on repeated calls', autoResult2.content[0].text === 'pong');
 
   const autoFail = await client.callTool({
     name: 'mux_call_tool',
-    arguments: { tool: 'totally_unknown_tool', arguments: {} }
+    arguments: { tool: 'totally_unknown_tool', arguments: {} },
   });
   assert('Auto-route fails gracefully for unknown tool', autoFail.isError === true);
   assert('Auto-route error suggests mux_find_tool', autoFail.content[0].text.includes('mux_find_tool'));
-
 } catch (err) {
   console.error(`  \x1b[38;5;196m✖ Fatal error: ${err.message}\x1b[0m`);
   fail++;
   results.push({ name: `Fatal: ${err.message}`, status: 'fail' });
 } finally {
-  try { await transport.close(); } catch {}
+  try {
+    await transport.close();
+  } catch {}
 }
 
 // ====== REPORT ======

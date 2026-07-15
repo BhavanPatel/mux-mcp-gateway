@@ -31,16 +31,12 @@ function interpolateEnv(value: string): string {
 function interpolateConfig(config: ServerConfig): ServerConfig {
   const result = { ...config };
   if (result.command) result.command = interpolateEnv(result.command);
-  if (result.args) result.args = result.args.map(a => interpolateEnv(a));
+  if (result.args) result.args = result.args.map((a) => interpolateEnv(a));
   if (result.env) {
-    result.env = Object.fromEntries(
-      Object.entries(result.env).map(([k, v]) => [k, interpolateEnv(v)])
-    );
+    result.env = Object.fromEntries(Object.entries(result.env).map(([k, v]) => [k, interpolateEnv(v)]));
   }
   if (result.headers) {
-    result.headers = Object.fromEntries(
-      Object.entries(result.headers).map(([k, v]) => [k, interpolateEnv(v)])
-    );
+    result.headers = Object.fromEntries(Object.entries(result.headers).map(([k, v]) => [k, interpolateEnv(v)]));
   }
   if (result.url) result.url = interpolateEnv(result.url);
   return result;
@@ -118,8 +114,8 @@ export function scoreMatch(needle: string, keyword: string): number {
   }
 
   // Word boundary match: split by common separators and match parts
-  const needleParts = normalizedNeedle.split(/[\s_\-./]+/).filter(part => part.length >= MIN_WORD_PART_LENGTH);
-  const keywordParts = normalizedKeyword.split(/[\s_\-./]+/).filter(part => part.length >= MIN_WORD_PART_LENGTH);
+  const needleParts = normalizedNeedle.split(/[\s_\-./]+/).filter((part) => part.length >= MIN_WORD_PART_LENGTH);
+  const keywordParts = normalizedKeyword.split(/[\s_\-./]+/).filter((part) => part.length >= MIN_WORD_PART_LENGTH);
   let wordMatchScore = 0;
   for (const needlePart of needleParts) {
     for (const keywordPart of keywordParts) {
@@ -136,13 +132,16 @@ export function scoreMatch(needle: string, keyword: string): number {
 
   // Levenshtein distance for short strings (typo tolerance)
   const lengthDifference = Math.abs(normalizedNeedle.length - normalizedKeyword.length);
-  if (normalizedNeedle.length >= MIN_LEVENSHTEIN_LENGTH
-    && normalizedKeyword.length >= MIN_LEVENSHTEIN_LENGTH
-    && lengthDifference <= MAX_LEVENSHTEIN_LENGTH_DIFF) {
+  if (
+    normalizedNeedle.length >= MIN_LEVENSHTEIN_LENGTH &&
+    normalizedKeyword.length >= MIN_LEVENSHTEIN_LENGTH &&
+    lengthDifference <= MAX_LEVENSHTEIN_LENGTH_DIFF
+  ) {
     const distance = levenshteinDistance(normalizedNeedle, normalizedKeyword);
     const longerLength = Math.max(normalizedNeedle.length, normalizedKeyword.length);
     if (distance <= MAX_SINGLE_EDIT_DISTANCE) return SCORE_TYPO_SINGLE_EDIT;
-    if (distance <= MAX_DOUBLE_EDIT_DISTANCE && longerLength >= MIN_LENGTH_FOR_DOUBLE_EDIT) return SCORE_TYPO_DOUBLE_EDIT;
+    if (distance <= MAX_DOUBLE_EDIT_DISTANCE && longerLength >= MIN_LENGTH_FOR_DOUBLE_EDIT)
+      return SCORE_TYPO_DOUBLE_EDIT;
   }
 
   return 0;
@@ -187,7 +186,7 @@ export function resolveServerName(name: string): string | undefined {
     for (const keyword of config.keywords || []) {
       const keywordScore = scoreMatch(needle, keyword);
       if (keywordScore > 0) {
-        const existing = candidates.find(candidate => candidate.name === serverName);
+        const existing = candidates.find((candidate) => candidate.name === serverName);
         if (existing) existing.score = Math.max(existing.score, keywordScore);
         else candidates.push({ name: serverName, score: keywordScore });
       }
@@ -220,7 +219,6 @@ export function watchRegistry(onChange?: () => void) {
     onChange?.();
   });
 }
-
 
 import { writeFileSync } from 'node:fs';
 

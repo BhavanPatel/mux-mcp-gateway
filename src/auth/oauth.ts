@@ -83,7 +83,7 @@ export async function performOAuthFlow(serverName: string, config: OAuthConfig):
           throw new Error(`Token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`);
         }
 
-        const data = await tokenRes.json() as any;
+        const data = (await tokenRes.json()) as any;
         const token: TokenEntry = {
           accessToken: data.access_token,
           refreshToken: data.refresh_token,
@@ -120,7 +120,11 @@ export async function performOAuthFlow(serverName: string, config: OAuthConfig):
   });
 }
 
-export async function refreshAccessToken(serverName: string, config: OAuthConfig, refreshToken: string): Promise<TokenEntry> {
+export async function refreshAccessToken(
+  serverName: string,
+  config: OAuthConfig,
+  refreshToken: string,
+): Promise<TokenEntry> {
   logger.info(`Refreshing token for "${serverName}"...`);
 
   const res = await fetch(config.tokenEndpoint, {
@@ -137,7 +141,7 @@ export async function refreshAccessToken(serverName: string, config: OAuthConfig
     throw new Error(`Token refresh failed: ${res.status} ${await res.text()}`);
   }
 
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
   const token: TokenEntry = {
     accessToken: data.access_token,
     refreshToken: data.refresh_token || refreshToken, // Some providers don't rotate refresh tokens

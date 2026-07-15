@@ -12,10 +12,7 @@ import { logger } from './logger.js';
  */
 export function loadEnvFiles(): void {
   const home = homedir();
-  const envPaths = [
-    resolve(home, '.mux', '.env'),
-    resolve(home, '.env'),
-  ];
+  const envPaths = [resolve(home, '.mux', '.env'), resolve(home, '.env')];
 
   // Load .env files
   for (const envPath of envPaths) {

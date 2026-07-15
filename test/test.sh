@@ -34,7 +34,7 @@ step "Part 1: Unit Tests"
 
 info "Running unit tests..."
 echo ""
-UNIT_OUTPUT=$(node --test "$SCRIPT_DIR/test/test-keyword-matching.mjs" "$SCRIPT_DIR/test/test-tool-discovery.mjs" 2>&1)
+UNIT_OUTPUT=$(node --test "$SCRIPT_DIR"/test/unit/test-*.mjs "$SCRIPT_DIR"/test/auth/test-*.mjs 2>&1)
 UNIT_EXIT=$?
 echo "$UNIT_OUTPUT"
 
@@ -55,7 +55,7 @@ step "Part 2: MCP Protocol Tests"
 
 info "Running MCP protocol tests via SDK..."
 echo ""
-MCP_OUTPUT=$(node "$SCRIPT_DIR/test/test-mcp.mjs" 2>&1)
+MCP_OUTPUT=$(node "$SCRIPT_DIR/test/e2e/test-mcp.mjs" 2>&1)
 MCP_EXIT=$?
 echo "$MCP_OUTPUT"
 
