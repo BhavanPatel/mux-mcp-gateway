@@ -16,7 +16,7 @@ function findDocsDir(): string {
 
 const validSlugs = [
   "architecture", "auth", "cli", "clients", "comparison",
-  "config", "development", "lifecycle", "tech-stack", "tools",
+  "config", "development", "lifecycle", "tech-stack", "tools", "troubleshooting",
 ];
 
 export function generateStaticParams() {

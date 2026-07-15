@@ -28,6 +28,7 @@ const categories: DocCategory[] = [
       { slug: "tools", title: "Tools" },
       { slug: "lifecycle", title: "Lifecycle" },
       { slug: "auth", title: "Authentication" },
+      { slug: "troubleshooting", title: "Troubleshooting" },
     ],
   },
   {
