@@ -1,6 +1,6 @@
 {
   "name": "mux-mcp-gateway",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MCP Gateway Router — one MCP to rule them all",
   "type": "module",
   "bin": {
