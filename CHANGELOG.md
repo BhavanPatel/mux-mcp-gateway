@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.0] — 2026-07-15
+
+### Added
+-  add log-to-file support and troubleshooting guide
+
 ## [1.1.1] — 2026-07-15
 
 ### Changed
