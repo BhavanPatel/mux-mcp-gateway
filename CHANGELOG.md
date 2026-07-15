@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.4] — 2026-07-15
+
+### Fixed
+-  version check cache invalidates on version change, reduced TTL to 5min
+
 ## [1.3.3] — 2026-07-15
 
 ### Fixed
