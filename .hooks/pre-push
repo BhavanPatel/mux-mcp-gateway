@@ -16,15 +16,15 @@ echo "        ✔ Build passed"
 
 # Lint
 echo "  [2/5] Linting..."
-npx eslint src/ --max-warnings=0 2>/dev/null || {
-  # Allow warnings but not errors
-  LINT_EXIT=$(npx eslint src/ 2>&1)
-  if echo "$LINT_EXIT" | grep -q "error"; then
-    echo "        ✖ Lint errors found. Fix before pushing."
-    exit 1
-  fi
-}
-echo "        ✔ Lint passed"
+LINT_RESULT=$(npx eslint src/ 2>&1)
+LINT_EXIT=$?
+# Fail only on actual errors, not warnings
+if echo "$LINT_RESULT" | grep -qE "^\s+\d+:\d+\s+error"; then
+  echo "        ✖ Lint errors found. Fix before pushing."
+  echo "$LINT_RESULT" | grep -E "error" | head -5
+  exit 1
+fi
+echo "        ✔ Lint passed (warnings only)"
 
 # Format
 echo "  [3/5] Auto-formatting..."
