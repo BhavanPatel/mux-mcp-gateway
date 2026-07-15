@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.6] — 2026-07-15
+
+### Fixed
+-  CLI auth polling uses mtime check instead of decryption, fix status.sh encrypted token read
+
 ## [1.3.5] — 2026-07-15
 
 ### Fixed
