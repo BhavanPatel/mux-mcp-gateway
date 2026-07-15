@@ -27,7 +27,10 @@ function log(level: Level, msg: string, meta?: Record<string, unknown>) {
 
   // Also write to log file if enabled
   if (logToFile) {
-    if (!logDirReady) { ensureLogDir(); logDirReady = true; }
+    if (!logDirReady) {
+      ensureLogDir();
+      logDirReady = true;
+    }
     try {
       appendFileSync(logFilePath, line);
     } catch {

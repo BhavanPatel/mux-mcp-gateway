@@ -31,11 +31,11 @@ function ensureDir() {
   }
 }
 
-function readJson(path: string): Record<string, any> {
-  return readSecureJson(path) as Record<string, any>;
+function readJson(path: string): Record<string, unknown> {
+  return readSecureJson(path);
 }
 
-function writeJson(path: string, data: any) {
+function writeJson(path: string, data: unknown) {
   ensureDir();
   writeSecureJson(path, data);
 }
@@ -43,12 +43,7 @@ function writeJson(path: string, data: any) {
 function openBrowser(url: string): void {
   // Sanitize URL to prevent command injection via exec
   const sanitized = url.replace(/["`$\\!]/g, '');
-  const cmd =
-    process.platform === 'darwin'
-      ? 'open'
-      : process.platform === 'win32'
-        ? 'start'
-        : 'xdg-open';
+  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
   exec(`${cmd} "${sanitized}"`);
 }
 
@@ -142,7 +137,11 @@ export class MuxOAuthProvider implements OAuthClientProvider {
       // Record file mtime at auth start — if it changes, tokens were written
       // No decryption needed — just detect the file was modified
       let startMtime = 0;
-      try { startMtime = statSync(TOKEN_PATH).mtimeMs; } catch { /* file may not exist yet */ }
+      try {
+        startMtime = statSync(TOKEN_PATH).mtimeMs;
+      } catch {
+        /* file may not exist yet */
+      }
 
       this._pollingInterval = setInterval(() => {
         try {

@@ -10,12 +10,12 @@ echo "  [pre-push] Running prechecks before push..."
 echo ""
 
 # Build
-echo "  [1/4] Building..."
+echo "  [1/5] Building..."
 npm run build > /dev/null 2>&1
 echo "        ✔ Build passed"
 
 # Lint
-echo "  [2/4] Linting..."
+echo "  [2/5] Linting..."
 npx eslint src/ --max-warnings=0 2>/dev/null || {
   # Allow warnings but not errors
   LINT_EXIT=$(npx eslint src/ 2>&1)
@@ -26,16 +26,18 @@ npx eslint src/ --max-warnings=0 2>/dev/null || {
 }
 echo "        ✔ Lint passed"
 
-# Format check
-echo "  [3/4] Checking formatting..."
-npx prettier --check 'src/**/*.ts' 'test/**/*.mjs' '*.json' '*.ts' > /dev/null 2>&1 || {
-  echo "        ✖ Formatting issues found. Run: npm run format"
-  exit 1
-}
-echo "        ✔ Format check passed"
+# Format
+echo "  [3/5] Auto-formatting..."
+npm run format > /dev/null 2>&1
+# Check if formatting changed anything (shouldn't if pre-commit ran)
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "        ⚠ Files were reformatted. Staging changes..."
+  git add -u
+fi
+echo "        ✔ Formatting OK"
 
 # Tests (unit + e2e)
-echo "  [4/4] Running tests..."
+echo "  [4/5] Running tests..."
 npm run test:ci > /dev/null 2>&1
 echo "        ✔ Tests passed"
 

@@ -19,41 +19,57 @@ const REGISTRY = resolve(TEST_DIR, 'servers.json');
 if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
 mkdirSync(TEST_DIR, { recursive: true });
 
-writeFileSync(REGISTRY, JSON.stringify({
-  servers: {
-    'pool-echo': {
-      transport: 'stdio',
-      command: 'node',
-      args: ['-e', `
+writeFileSync(
+  REGISTRY,
+  JSON.stringify(
+    {
+      servers: {
+        'pool-echo': {
+          transport: 'stdio',
+          command: 'node',
+          args: [
+            '-e',
+            `
         const{McpServer}=require('@modelcontextprotocol/sdk/server/mcp.js');
         const{StdioServerTransport}=require('@modelcontextprotocol/sdk/server/stdio.js');
         const s=new McpServer({name:'pool-echo',version:'1.0'});
         s.tool('ping',{},async()=>({content:[{type:'text',text:'pong'}]}));
         s.tool('slow',{},async()=>{await new Promise(r=>setTimeout(r,100));return{content:[{type:'text',text:'done'}]};});
         s.connect(new StdioServerTransport());
-      `],
-      keywords: ['pool', 'test', 'echo'],
-      idleTimeoutMs: 5000
+      `,
+          ],
+          keywords: ['pool', 'test', 'echo'],
+          idleTimeoutMs: 5000,
+        },
+        'pool-fail': {
+          transport: 'stdio',
+          command: 'node',
+          args: ['-e', 'process.exit(1)'],
+          keywords: ['fail'],
+          idleTimeoutMs: 5000,
+        },
+      },
     },
-    'pool-fail': {
-      transport: 'stdio',
-      command: 'node',
-      args: ['-e', 'process.exit(1)'],
-      keywords: ['fail'],
-      idleTimeoutMs: 5000
-    }
-  }
-}, null, 2));
+    null,
+    2,
+  ),
+);
 
 writeFileSync(resolve(TEST_DIR, 'tokens.json'), '{}');
 
 // Test framework
-let pass = 0, fail = 0;
+let pass = 0,
+  fail = 0;
 const results = [];
 
 function assert(name, condition) {
-  if (condition) { pass++; results.push({ name, status: 'pass' }); }
-  else { fail++; results.push({ name, status: 'fail' }); }
+  if (condition) {
+    pass++;
+    results.push({ name, status: 'pass' });
+  } else {
+    fail++;
+    results.push({ name, status: 'fail' });
+  }
 }
 
 async function connectMux() {
@@ -136,7 +152,10 @@ try {
     client.callTool({ name: 'mux_call_tool', arguments: { server: 'pool-echo', tool: 'ping', arguments: {} } }),
     client.callTool({ name: 'mux_call_tool', arguments: { server: 'pool-echo', tool: 'ping', arguments: {} } }),
   ]);
-  assert('All concurrent calls succeed', concurrent.every(r => r.content[0].text === 'pong'));
+  assert(
+    'All concurrent calls succeed',
+    concurrent.every((r) => r.content[0].text === 'pong'),
+  );
 
   const [slow, fast] = await Promise.all([
     client.callTool({ name: 'mux_call_tool', arguments: { server: 'pool-echo', tool: 'slow', arguments: {} } }),
@@ -149,17 +168,18 @@ try {
   console.log('  \x1b[38;5;39m━━━\x1b[0m \x1b[1m5. Server list reflects pool\x1b[0m');
   const listResult = await client.callTool({ name: 'mux_list_servers', arguments: {} });
   const servers = JSON.parse(listResult.content[0].text);
-  const echo = servers.find(s => s.name === 'pool-echo');
+  const echo = servers.find((s) => s.name === 'pool-echo');
   assert('Active server shows tool count', echo.status === 'active' && echo.tools === 2);
-  const failSrv = servers.find(s => s.name === 'pool-fail');
+  const failSrv = servers.find((s) => s.name === 'pool-fail');
   assert('Failed server shows idle', failSrv.status === 'idle');
-
 } catch (err) {
   console.error(`  \x1b[38;5;196m✖ Fatal: ${err.message}\x1b[0m`);
   fail++;
   results.push({ name: `Fatal: ${err.message}`, status: 'fail' });
 } finally {
-  try { await transport.close(); } catch {}
+  try {
+    await transport.close();
+  } catch {}
 }
 
 // ====== REPORT ======

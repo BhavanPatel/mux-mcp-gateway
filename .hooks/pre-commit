@@ -1,0 +1,24 @@
+#!/bin/bash
+# Pre-commit hook: auto-format staged files and re-stage them
+set -e
+
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+
+# Get staged .ts and .mjs files
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|mjs)$' || true)
+STAGED_JSON=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.json$' | grep -v 'package-lock' || true)
+
+if [[ -z "$STAGED_TS" && -z "$STAGED_JSON" ]]; then
+  exit 0
+fi
+
+# Format staged files
+FILES=""
+[[ -n "$STAGED_TS" ]] && FILES="$STAGED_TS"
+[[ -n "$STAGED_JSON" ]] && FILES="$FILES $STAGED_JSON"
+
+if [[ -n "$FILES" ]]; then
+  echo "$FILES" | xargs npx prettier --write 2>/dev/null
+  echo "$FILES" | xargs git add
+fi
