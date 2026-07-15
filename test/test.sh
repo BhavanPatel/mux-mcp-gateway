@@ -76,10 +76,15 @@ fi
 # ==========================================
 step "Part 3: CLI Commands"
 
+# Helper: strip ANSI escape sequences for CI compatibility
+strip_ansi() {
+    sed 's/\x1b\[[0-9;]*m//g; s/\x1b\[[0-9;]*[A-Za-z]//g'
+}
+
 # help
-HELP_OUT=$("$SCRIPT_DIR/mux.sh" --help 2>&1)
+HELP_OUT=$("$SCRIPT_DIR/mux.sh" --help 2>&1 | strip_ansi)
 assert "mux.sh --help works" "[[ $? -eq 0 ]]"
-assert "Help lists all commands" "echo '$HELP_OUT' | grep -q 'setup' && echo '$HELP_OUT' | grep -q 'add' && echo '$HELP_OUT' | grep -q 'remove'"
+assert "Help lists all commands" "echo \"$HELP_OUT\" | grep -q 'setup' && echo \"$HELP_OUT\" | grep -q 'add' && echo \"$HELP_OUT\" | grep -q 'remove'"
 
 # add (JSON one-liner)
 "$SCRIPT_DIR/mux.sh" add e2e-http-test '{"type":"https","url":"https://e2e.test.com/mcp"}' >/dev/null 2>&1
@@ -89,17 +94,17 @@ assert "add: HTTP server from JSON" "grep -q 'e2e-http-test' '$REGISTRY'"
 assert "add: stdio server from JSON" "grep -q 'e2e-stdio-test' '$REGISTRY'"
 
 # list
-LIST_OUT=$("$SCRIPT_DIR/mux.sh" list 2>&1)
-assert "list: shows added servers" "echo '$LIST_OUT' | grep -q 'e2e-http-test' && echo '$LIST_OUT' | grep -q 'e2e-stdio-test'"
+LIST_OUT=$("$SCRIPT_DIR/mux.sh" list 2>&1 | strip_ansi)
+assert "list: shows added servers" "echo \"$LIST_OUT\" | grep -q 'e2e-http-test' && echo \"$LIST_OUT\" | grep -q 'e2e-stdio-test'"
 
 # health
-HEALTH_OUT=$("$SCRIPT_DIR/mux.sh" health 2>&1)
+HEALTH_OUT=$("$SCRIPT_DIR/mux.sh" health 2>&1 | strip_ansi)
 assert "health: runs without error" "[[ $? -eq 0 ]]"
-assert "health: shows table" "echo '$HEALTH_OUT' | grep -q 'Server'"
+assert "health: shows table" "echo \"$HEALTH_OUT\" | grep -q 'Server'"
 
 # status
-STATUS_OUT=$("$SCRIPT_DIR/mux.sh" status 2>&1)
-assert "status: shows registry info" "echo '$STATUS_OUT' | grep -q 'Registry'"
+STATUS_OUT=$("$SCRIPT_DIR/mux.sh" status 2>&1 | strip_ansi)
+assert "status: shows registry info" "echo \"$STATUS_OUT\" | grep -q 'Registry'"
 
 # metrics
 python3 -c "
@@ -112,18 +117,18 @@ store = {'events': [
 ], 'firstSeen': int(time.time()*1000) - 86400000}
 with open(path, 'w') as f: json.dump(store, f)
 "
-METRICS_OUT=$("$SCRIPT_DIR/mux.sh" metrics 2>&1)
+METRICS_OUT=$("$SCRIPT_DIR/mux.sh" metrics 2>&1 | strip_ansi)
 assert "metrics: runs without error" "true"
-assert "metrics: shows insights header" "echo '$METRICS_OUT' | grep -q 'INSIGHTS'"
-assert "metrics: shows credit savings %" "echo '$METRICS_OUT' | grep -q 'Credit savings'"
-assert "metrics: shows tokens saved for API" "echo '$METRICS_OUT' | grep -q 'Tokens saved'"
-assert "metrics: shows context reduction" "echo '$METRICS_OUT' | grep -q 'Context Reduction'"
-assert "metrics: shows activity chart" "echo '$METRICS_OUT' | grep -q 'Activity'"
-assert "metrics: shows resource savings" "echo '$METRICS_OUT' | grep -q 'Resource Savings'"
+assert "metrics: shows insights header" "echo \"$METRICS_OUT\" | grep -q 'INSIGHTS'"
+assert "metrics: shows credit savings %" "echo \"$METRICS_OUT\" | grep -q 'Credit savings'"
+assert "metrics: shows tokens saved for API" "echo \"$METRICS_OUT\" | grep -q 'Tokens saved'"
+assert "metrics: shows context reduction" "echo \"$METRICS_OUT\" | grep -q 'Context Reduction'"
+assert "metrics: shows activity chart" "echo \"$METRICS_OUT\" | grep -q 'Activity'"
+assert "metrics: shows resource savings" "echo \"$METRICS_OUT\" | grep -q 'Resource Savings'"
 
 # keywords
-KW_OUT=$(echo "" | "$SCRIPT_DIR/mux.sh" keywords 2>&1 || true)
-assert "keywords: shows keyword list" "echo '$KW_OUT' | grep -q 'Keywords'"
+KW_OUT=$(echo "" | "$SCRIPT_DIR/mux.sh" keywords 2>&1 | strip_ansi || true)
+assert "keywords: shows keyword list" "echo \"$KW_OUT\" | grep -q 'Keywords'"
 
 # remove
 "$SCRIPT_DIR/mux.sh" remove e2e-http-test >/dev/null 2>&1
@@ -132,8 +137,8 @@ assert "remove: HTTP server removed" "! grep -q 'e2e-http-test' '$REGISTRY'"
 assert "remove: stdio server removed" "! grep -q 'e2e-stdio-test' '$REGISTRY'"
 
 # remove nonexistent
-REMOVE_ERR=$("$SCRIPT_DIR/mux.sh" remove "fake-server-$$" 2>&1 || true)
-assert "remove nonexistent: shows error" "echo '$REMOVE_ERR' | grep -q 'not found'"
+REMOVE_ERR=$("$SCRIPT_DIR/mux.sh" remove "fake-server-$$" 2>&1 | strip_ansi || true)
+assert "remove nonexistent: shows error" "echo \"$REMOVE_ERR\" | grep -q 'not found'"
 
 # ==========================================
 # PART 4: JSONC Parser
