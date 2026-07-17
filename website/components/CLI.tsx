@@ -13,6 +13,7 @@ const commands = [
   { cmd: "mux-cli status", desc: "Show Mux process info" },
   { cmd: "mux-cli metrics", desc: "Usage stats + insights dashboard" },
   { cmd: "mux-cli keywords [name]", desc: "View/edit server keywords" },
+  { cmd: "mux-cli uninstall", desc: "Remove Mux completely" },
   { cmd: "mux-cli update", desc: "Pull latest + rebuild" },
 ];
 

@@ -67,6 +67,7 @@ print_header() {
     _box_line "    ${C_CYAN}mux-cli health${C_RESET}             ${C_GRAY}Test all servers${C_RESET}"
     _box_line "    ${C_CYAN}mux-cli list${C_RESET}               ${C_GRAY}Show registered servers${C_RESET}"
     _box_line "    ${C_CYAN}mux-cli status${C_RESET}             ${C_GRAY}Show process info${C_RESET}"
+    _box_line "    ${C_CYAN}mux-cli uninstall${C_RESET}          ${C_GRAY}Remove Mux completely${C_RESET}"
     _box_line "    ${C_CYAN}mux-cli metrics${C_RESET}            ${C_GRAY}Usage stats + insights${C_RESET}"
     _box_line "    ${C_CYAN}mux-cli keywords${C_RESET} ${C_WHITE}[name]${C_RESET}   ${C_GRAY}View/edit server keywords${C_RESET}"
     _box_line "    ${C_CYAN}mux-cli update${C_RESET}             ${C_GRAY}Update to latest version${C_RESET}"

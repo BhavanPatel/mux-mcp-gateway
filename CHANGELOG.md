@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0] — 2026-07-17
+
+### Added
+- `mux-cli uninstall` command — full cleanup (removes hooks, unpatches client configs, deletes registry)
+- Auto-approve hooks installed per-client during setup (Kiro: PreToolUse hook, Cursor: rules file)
+- `scripts/lib/hooks.sh` — client-agnostic hook install/remove dispatch
+
 ## [1.3.7] — 2026-07-15
 
 ### Fixed

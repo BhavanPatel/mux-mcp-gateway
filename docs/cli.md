@@ -15,6 +15,7 @@ All management happens through `mux-cli`:
 | `mux-cli status` | Show Mux process info | `mux-cli status` |
 | `mux-cli metrics` | Usage stats, charts, credit savings (%), token savings | `mux-cli metrics` |
 | `mux-cli keywords [name]` | View all keywords, or add/replace for a server | `mux-cli keywords gitlab` |
+| `mux-cli uninstall` | Remove Mux completely (hooks, config, registry) | `mux-cli uninstall` |
 | `mux-cli update` | Pull latest code + rebuild | `mux-cli update` |
 
 ### Add Examples

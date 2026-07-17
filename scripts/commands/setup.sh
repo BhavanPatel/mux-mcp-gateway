@@ -108,6 +108,8 @@ cmd_setup() {
     ok "Patched ${C_WHITE}${target_config}${C_RESET}"
     ok "Added ${C_GREEN}mux${C_RESET} server, disabled ${count} imported servers"
 
+    _install_auto_approve "$target_config"
+
     # Step 5: Health check
     step "Step 5/5: Server health check"
     info "Checking server readiness..."

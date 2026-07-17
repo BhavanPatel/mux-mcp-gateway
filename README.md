@@ -165,6 +165,7 @@ mux-cli list               # Show servers + status
 mux-cli metrics            # Usage insights dashboard
 mux-cli keywords [name]    # View/edit keywords
 mux-cli update             # Update to latest version
+mux-cli uninstall          # Remove Mux completely
 ```
 
 ---

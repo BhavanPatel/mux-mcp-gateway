@@ -8,6 +8,7 @@ export SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || realpath "
 # Load shared libraries
 source "$SCRIPT_DIR/scripts/lib/theme.sh"
 source "$SCRIPT_DIR/scripts/lib/registry.sh"
+source "$SCRIPT_DIR/scripts/lib/hooks.sh"
 
 # Interactive menu
 _show_menu() {
@@ -21,6 +22,7 @@ _show_menu() {
     echo -e "    ${C_CYAN}6)${C_RESET} List servers     ${C_GRAY}— Show current registry${C_RESET}"
     echo -e "    ${C_CYAN}7)${C_RESET} Metrics          ${C_GRAY}— Usage stats + insights${C_RESET}"
     echo -e "    ${C_CYAN}8)${C_RESET} Status           ${C_GRAY}— Show Mux process info${C_RESET}"
+    echo -e "    ${C_CYAN}9)${C_RESET} Uninstall        ${C_GRAY}— Remove Mux completely${C_RESET}"
     echo ""
     read -rp "  Choice [1]: " choice
     case "${choice:-1}" in
@@ -32,6 +34,7 @@ _show_menu() {
         6) source "$SCRIPT_DIR/scripts/commands/list.sh"; cmd_list ;;
         7) source "$SCRIPT_DIR/scripts/commands/metrics.sh"; cmd_metrics ;;
         8) source "$SCRIPT_DIR/scripts/commands/status.sh"; cmd_status ;;
+        9) source "$SCRIPT_DIR/scripts/commands/uninstall.sh"; cmd_uninstall ;;
         *) err "Invalid choice"; exit 1 ;;
     esac
 }
@@ -50,6 +53,7 @@ main() {
         update) source "$SCRIPT_DIR/scripts/commands/update.sh"; cmd_update ;;
         metrics) source "$SCRIPT_DIR/scripts/commands/metrics.sh"; cmd_metrics ;;
         keywords) shift; source "$SCRIPT_DIR/scripts/commands/keywords.sh"; cmd_keywords "$@" ;;
+        uninstall) shift; source "$SCRIPT_DIR/scripts/commands/uninstall.sh"; cmd_uninstall "$@" ;;
         -h|--help)
             print_header
             exit 0 ;;

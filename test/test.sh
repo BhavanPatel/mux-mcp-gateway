@@ -84,7 +84,7 @@ strip_ansi() {
 # help
 HELP_OUT=$("$SCRIPT_DIR/mux.sh" --help 2>&1 | strip_ansi)
 assert "mux.sh --help works" "[[ $? -eq 0 ]]"
-assert "Help lists all commands" "echo \"$HELP_OUT\" | grep -q 'setup' && echo \"$HELP_OUT\" | grep -q 'add' && echo \"$HELP_OUT\" | grep -q 'remove'"
+assert "Help lists all commands" "echo \"$HELP_OUT\" | grep -q 'setup' && echo \"$HELP_OUT\" | grep -q 'add' && echo \"$HELP_OUT\" | grep -q 'remove' && echo \"$HELP_OUT\" | grep -q 'uninstall'"
 
 # add (JSON one-liner)
 "$SCRIPT_DIR/mux.sh" add e2e-http-test '{"type":"https","url":"https://e2e.test.com/mcp"}' >/dev/null 2>&1

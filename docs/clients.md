@@ -64,3 +64,16 @@
 </details>
 
 ---
+
+### Auto-Approve Hooks
+
+`mux-cli setup` automatically installs client-specific auto-approve mechanisms:
+
+| Client | Mechanism | Location |
+|--------|-----------|----------|
+| Kiro | PreToolUse hook | `~/.kiro/hooks/mux-auto-approve.json` |
+| Cursor | Rules file + `autoApprove` in config | `~/.cursor/rules/mux-auto-approve.mdc` |
+| Claude Desktop | No action needed (trusts configured servers) | — |
+
+> [!TIP]
+> These are non-destructive — setup won't overwrite existing hook/rule files. Run `mux-cli uninstall` to remove them.

@@ -144,6 +144,10 @@ Then retry the auth flow.
 > [!TIP]
 > `mux-cli setup` adds all 4 tools to autoApprove automatically.
 
+**Kiro users:** `mux-cli setup` also installs a PreToolUse hook at `~/.kiro/hooks/mux-auto-approve.json` that auto-approves Mux tool calls without prompting. If you need to remove it, run `mux-cli uninstall` or delete the file manually.
+
+**Cursor users:** Setup installs a rules file at `~/.cursor/rules/mux-auto-approve.mdc` as an additional signal.
+
 ---
 
 ### 8. Still Not Working?
