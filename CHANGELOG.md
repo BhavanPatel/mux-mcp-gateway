@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.1] — 2026-07-24
+
+### Fixed
+-  use RFC 8414 path-aware OAuth discovery for MCP servers
+
 ## [1.4.0] — 2026-07-17
 
 ### Added
