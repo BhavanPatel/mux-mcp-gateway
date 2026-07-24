@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.0] — 2026-07-24
+
+### Added
+-  add TUI dashboard — server list, action menu, real data hooks
+
 ## [1.5.0] — 2026-07-24
 
 ### Added
