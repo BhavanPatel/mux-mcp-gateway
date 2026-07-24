@@ -13,20 +13,35 @@ export interface HttpDownstreamConnection {
 
 /**
  * Probe the server's OAuth discovery endpoint.
- * Returns true if the server supports OAuth (has .well-known/oauth-authorization-server).
+ * Per RFC 8414 §3, when the server URL has a path component, the discovery
+ * URL is: {origin}/.well-known/oauth-authorization-server{path}
+ * We try the path-aware form first, then fall back to the root form.
  */
 async function hasOAuthDiscovery(serverUrl: string): Promise<boolean> {
   try {
     const url = new URL(serverUrl);
-    const discoveryUrl = `${url.origin}/.well-known/oauth-authorization-server`;
-    const response = await fetch(discoveryUrl, {
-      method: 'GET',
-      signal: AbortSignal.timeout(5000),
-    });
-    if (response.ok) {
-      const body = await response.json();
-      // Validate it's actual OAuth metadata (must have authorization_endpoint)
-      return !!(body && body.authorization_endpoint);
+    const pathSuffix = url.pathname !== '/' ? url.pathname : '';
+
+    // RFC 8414: path-aware discovery first, then root fallback
+    const discoveryUrls = [
+      ...(pathSuffix ? [`${url.origin}/.well-known/oauth-authorization-server${pathSuffix}`] : []),
+      `${url.origin}/.well-known/oauth-authorization-server`,
+    ];
+
+    for (const discoveryUrl of discoveryUrls) {
+      try {
+        const response = await fetch(discoveryUrl, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000),
+        });
+        if (response.ok) {
+          const body = await response.json();
+          // Validate it's actual OAuth metadata (must have authorization_endpoint)
+          if (body && body.authorization_endpoint) return true;
+        }
+      } catch {
+        // Try next URL
+      }
     }
     return false;
   } catch {
