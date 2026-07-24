@@ -1,6 +1,6 @@
 {
   "name": "mux-mcp-gateway",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "MCP Gateway Router — one MCP to rule them all",
   "type": "module",
   "bin": {
@@ -36,11 +36,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/BhavanPatel/mux.git"
+    "url": "https://github.com/BhavanPatel/mux-mcp-gateway.git"
   },
-  "homepage": "https://github.com/BhavanPatel/mux",
+  "homepage": "https://github.com/BhavanPatel/mux-mcp-gateway",
   "bugs": {
-    "url": "https://github.com/BhavanPatel/mux/issues"
+    "url": "https://github.com/BhavanPatel/mux-mcp-gateway/issues"
   },
   "keywords": [
     "mcp",

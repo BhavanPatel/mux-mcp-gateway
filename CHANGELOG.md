@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.0] — 2026-07-24
+
+### Added
+-  add TUI foundation — Ink + React banner with responsive layout
+
 ## [1.4.2] — 2026-07-24
 
 ### Changed
