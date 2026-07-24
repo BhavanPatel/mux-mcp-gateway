@@ -1,7 +1,14 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/setup.ts', 'src/registry.ts', 'src/tool-catalog.ts', 'src/tool-discovery.ts'],
+  entry: [
+    'src/index.ts',
+    'src/setup.ts',
+    'src/registry.ts',
+    'src/tool-catalog.ts',
+    'src/tool-discovery.ts',
+    'src/tui/App.tsx',
+  ],
   format: ['esm'],
   target: 'node20',
   outDir: 'dist',

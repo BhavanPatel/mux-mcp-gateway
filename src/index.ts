@@ -6,6 +6,17 @@ import { logger } from './logger.js';
 import { loadEnvFiles } from './env.js';
 import { loadMetrics, flushMetrics, pruneOldEvents } from './metrics.js';
 
+// TUI mode detection — launch interactive dashboard if --tui or "dashboard" arg
+if (process.argv.includes('--tui') || process.argv[2] === 'dashboard') {
+  const { renderTui } = await import('./tui/App.js');
+  renderTui();
+} else {
+  main().catch((err) => {
+    logger.error(`Fatal: ${err.message}`);
+    process.exit(1);
+  });
+}
+
 async function main() {
   // Load env vars from shell profiles and .env files
   loadEnvFiles();
@@ -42,8 +53,3 @@ async function main() {
   process.stdin.on('end', shutdown);
   process.stdin.on('close', shutdown);
 }
-
-main().catch((err) => {
-  logger.error(`Fatal: ${err.message}`);
-  process.exit(1);
-});
