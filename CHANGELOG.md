@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.0] — 2026-08-03
+
+### Added
+-  add TUI Phase 3 — Onboarding, EditServer, AuthFlow, HealthCheck + view routing
+
 ## [1.6.0] — 2026-07-24
 
 ### Added
