@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.0] — 2026-08-03
+
+### Added
+-  add TUI Phase 4 — Metrics view, charts, Help, keybinding polish
+
 ## [1.7.0] — 2026-08-03
 
 ### Added
