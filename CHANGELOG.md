@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.10.0] — 2026-08-03
+
+### Added
+-  complete 24 remaining redesign items
+
 ## [1.9.0] — 2026-08-03
 
 ### Added
