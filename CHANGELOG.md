@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.0] — 2026-08-03
+
+### Added
+-  add Spinner, BoxWrapper, usePool hook + wire real save/delete to registry
+
 ## [1.8.0] — 2026-08-03
 
 ### Added
