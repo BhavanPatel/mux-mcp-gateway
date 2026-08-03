@@ -9,6 +9,8 @@ import { Onboarding, ONBOARDING_OPTION_COUNT } from './views/Onboarding.js';
 import { EditServer } from './views/EditServer.js';
 import { AuthFlow } from './views/AuthFlow.js';
 import { HealthCheck } from './views/HealthCheck.js';
+import { Metrics } from './views/Metrics.js';
+import { Help } from './views/Help.js';
 import { useRegistry } from './hooks/useRegistry.js';
 import { useMetrics } from './hooks/useMetrics.js';
 import { getMenuItemCount } from './components/ActionMenu.js';
@@ -24,7 +26,9 @@ type View =
   | { name: 'onboarding' }
   | { name: 'edit-server'; server: TuiServerInfo }
   | { name: 'auth-flow'; servers: AuthServerState[] }
-  | { name: 'health-check'; results: ServerCheckResult[] };
+  | { name: 'health-check'; results: ServerCheckResult[] }
+  | { name: 'metrics' }
+  | { name: 'help' };
 
 function formatUptime(): string {
   const ms = Date.now() - startTime;
@@ -91,7 +95,8 @@ function App() {
           break;
         }
         case 1:
-          // View metrics — for now stay on dashboard (Phase 4)
+          // View metrics
+          navigateTo({ name: 'metrics' });
           break;
         case 2:
           // Add a server — for now stay on dashboard (could trigger onboarding add flow)
@@ -170,6 +175,12 @@ function App() {
       return;
     }
 
+    // Help shortcut from dashboard
+    if (input === '?' && view.name === 'dashboard') {
+      navigateTo({ name: 'help' });
+      return;
+    }
+
     // Navigation only in dashboard and onboarding (other views handle their own input)
     if (view.name === 'dashboard' || view.name === 'onboarding') {
       if (key.upArrow) {
@@ -227,6 +238,23 @@ function App() {
           onBack={goBack}
           onRetryAll={handleHealthRetryAll}
           onAuthFailed={handleHealthAuthFailed}
+        />
+      );
+
+    case 'metrics':
+      return (
+        <Metrics
+          metrics={metrics}
+          serverCount={registry.totalServers}
+          onBack={goBack}
+        />
+      );
+
+    case 'help':
+      return (
+        <Help
+          version={VERSION}
+          onBack={goBack}
         />
       );
 
