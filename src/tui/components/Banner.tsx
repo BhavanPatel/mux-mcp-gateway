@@ -6,6 +6,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import Gradient from 'ink-gradient';
 import { useLayout } from '../hooks/useLayout.js';
+import { useCountUp } from '../hooks/useAnimations.js';
 import { BANNER_LINES, colors, box } from '../styles.js';
 
 interface BannerProps {
@@ -18,13 +19,17 @@ interface BannerProps {
 
 export function Banner({ version, uptime, toolCount, callsToday, successRate }: BannerProps) {
   const { layout, columns } = useLayout();
+  const animatedCalls = useCountUp(callsToday ?? 0);
+  const animatedTools = useCountUp(toolCount ?? 0);
 
   if (layout === 'narrow') {
-    return <NarrowBanner version={version} toolCount={toolCount} columns={columns} />;
+    return <NarrowBanner version={version} toolCount={animatedTools} uptime={uptime} columns={columns} />;
   }
 
   const showStatsRight = layout === 'full' || layout === 'standard';
   const boxWidth = Math.min(columns - 4, 68);
+
+  const animatedStats = { version, uptime, toolCount: animatedTools, callsToday: animatedCalls, successRate };
 
   return (
     <Box flexDirection="column">
@@ -32,7 +37,7 @@ export function Banner({ version, uptime, toolCount, callsToday, successRate }: 
       <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
 
       {BANNER_LINES.map((line, i) => {
-        const stat = showStatsRight ? getStatLine(i, { version, uptime, toolCount, callsToday, successRate }) : '';
+        const stat = showStatsRight ? getStatLine(i, animatedStats) : '';
         const padding = boxWidth - line.length - stat.length - 2;
         const padStr = padding > 0 ? ' '.repeat(padding) : ' ';
         return (
@@ -65,11 +70,22 @@ export function Banner({ version, uptime, toolCount, callsToday, successRate }: 
   );
 }
 
-function NarrowBanner({ version, toolCount, columns }: { version: string; toolCount?: number; columns: number }) {
+function NarrowBanner({
+  version,
+  toolCount,
+  uptime,
+  columns,
+}: {
+  version: string;
+  toolCount?: number;
+  uptime?: string;
+  columns: number;
+}) {
   const w = Math.min(columns - 4, 40);
+  const summaryLine = `${toolCount ?? 0} tools${uptime ? ` \u2502 \u25B2 ${uptime}` : ''}`;
   return (
     <Box flexDirection="column">
-      <Text>{colors.brandMid(`  ${box.topLeft}${'─'.repeat(w)}${box.topRight}`)}</Text>
+      <Text>{colors.brandMid(`  ${box.topLeft}${'\u2500'.repeat(w)}${box.topRight}`)}</Text>
       <Text>
         {colors.brandMid(`  ${box.vertical}  `)}
         <Gradient name="cristal">M U X</Gradient>
@@ -79,11 +95,11 @@ function NarrowBanner({ version, toolCount, columns }: { version: string; toolCo
       </Text>
       <Text>
         {colors.brandMid(`  ${box.vertical}  `)}
-        <Text>{colors.textSecondary(`${toolCount ?? 0} tools`)}</Text>
-        <Text>{' '.repeat(Math.max(0, w - 12))}</Text>
+        <Text>{colors.textSecondary(summaryLine)}</Text>
+        <Text>{' '.repeat(Math.max(0, w - summaryLine.length - 4))}</Text>
         {colors.brandMid(box.vertical)}
       </Text>
-      <Text>{colors.brandMid(`  ${box.bottomLeft}${'─'.repeat(w)}${box.bottomRight}`)}</Text>
+      <Text>{colors.brandMid(`  ${box.bottomLeft}${'\u2500'.repeat(w)}${box.bottomRight}`)}</Text>
     </Box>
   );
 }

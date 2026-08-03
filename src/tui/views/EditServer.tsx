@@ -14,11 +14,12 @@ interface EditServerProps {
   onAuth: (serverName: string) => void;
   onSaveTags: (serverName: string, tags: string[]) => void;
   onDelete: (serverName: string) => void;
+  onTest?: (serverName: string) => void;
 }
 
 type EditMode = 'view' | 'editing-tags';
 
-export function EditServer({ server, onBack, onAuth, onSaveTags, onDelete }: EditServerProps) {
+export function EditServer({ server, onBack, onAuth, onSaveTags, onDelete, onTest }: EditServerProps) {
   const { columns } = useLayout();
   const boxWidth = Math.min(columns - 4, 68);
   const [mode, setMode] = useState<EditMode>('view');
@@ -72,6 +73,10 @@ export function EditServer({ server, onBack, onAuth, onSaveTags, onDelete }: Edi
       onAuth(server.name);
       return;
     }
+    if (input === 't' && onTest) {
+      onTest(server.name);
+      return;
+    }
     if (input === 'd') {
       setConfirmDelete(true);
       return;
@@ -102,10 +107,16 @@ export function EditServer({ server, onBack, onAuth, onSaveTags, onDelete }: Edi
         {colors.brandMid(`  ${box.vertical}  `)}
         {colors.textSecondary('Auth'.padEnd(12))}
         {authLabel}
-        {' '.repeat(Math.max(1, boxWidth - 20 - (server.status === 'connected' ? 13 : server.status === 'needs-auth' ? 19 : 3)))}
+        {' '.repeat(
+          Math.max(1, boxWidth - 20 - (server.status === 'connected' ? 13 : server.status === 'needs-auth' ? 19 : 3)),
+        )}
         {colors.brandMid(box.vertical)}
       </Text>
-      <DetailRow label="Tools" value={server.toolCount ? `${server.toolCount} available` : 'None discovered'} boxWidth={boxWidth} />
+      <DetailRow
+        label="Tools"
+        value={server.toolCount ? `${server.toolCount} available` : 'None discovered'}
+        boxWidth={boxWidth}
+      />
 
       <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
       <Text>
@@ -174,8 +185,8 @@ export function EditServer({ server, onBack, onAuth, onSaveTags, onDelete }: Edi
       ) : (
         <Text>
           {colors.brandMid(`  ${box.vertical}  `)}
-          {colors.accentDim('[e] edit tags   [r] refresh auth   [d] delete   [esc] back')}
-          {' '.repeat(Math.max(1, boxWidth - 60))}
+          {colors.accentDim('[e] edit tags   [r] refresh auth   [t] test   [d] delete   [esc] back')}
+          {' '.repeat(Math.max(1, boxWidth - 72))}
           {colors.brandMid(box.vertical)}
         </Text>
       )}

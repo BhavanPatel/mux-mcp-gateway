@@ -6,6 +6,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { Banner } from '../components/Banner.js';
 import { useLayout } from '../hooks/useLayout.js';
+import { useStaggerIn } from '../hooks/useAnimations.js';
 import { colors, symbols, box } from '../styles.js';
 
 interface OnboardingProps {
@@ -35,6 +36,7 @@ export function Onboarding({ selectedIndex, onSelect: _onSelect }: OnboardingPro
   const { layout, columns } = useLayout();
   const boxWidth = Math.min(columns - 4, 68);
   const showDesc = layout !== 'narrow';
+  const visibleCount = useStaggerIn(OPTIONS.length);
 
   return (
     <Box flexDirection="column" gap={1}>
@@ -42,11 +44,20 @@ export function Onboarding({ selectedIndex, onSelect: _onSelect }: OnboardingPro
 
       <Text>
         {'  '}
-        {colors.textPrimary("Welcome! Mux connects your AI clients to all your MCP servers")}
+        {colors.textBold('MCP Gateway Router')}
       </Text>
       <Text>
         {'  '}
-        {colors.textPrimary("through a single always-on gateway.")}
+        {colors.textSecondary('One MCP to rule them all.')}
+      </Text>
+      <Text>{''}</Text>
+      <Text>
+        {'  '}
+        {colors.textPrimary('Welcome! Mux connects your AI clients to all your MCP servers')}
+      </Text>
+      <Text>
+        {'  '}
+        {colors.textPrimary('through a single always-on gateway.')}
       </Text>
 
       <Box flexDirection="column">
@@ -57,12 +68,11 @@ export function Onboarding({ selectedIndex, onSelect: _onSelect }: OnboardingPro
         </Text>
         <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
 
-        {OPTIONS.map((opt, i) => (
+        {OPTIONS.slice(0, visibleCount).map((opt, i) => (
           <Box key={opt.id} flexDirection="column">
             <Text>
               {colors.brandMid(`  ${box.vertical}  `)}
-              {i === selectedIndex ? colors.accent(symbols.selected) : ' '}
-              {' '}
+              {i === selectedIndex ? colors.accent(symbols.selected) : ' '}{' '}
               {i === selectedIndex ? colors.textBold(opt.label) : colors.textPrimary(opt.label)}
               {' '.repeat(Math.max(1, boxWidth - opt.label.length - 6))}
               {colors.brandMid(box.vertical)}

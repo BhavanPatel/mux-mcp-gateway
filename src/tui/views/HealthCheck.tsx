@@ -50,6 +50,10 @@ export function HealthCheck({ results, onBack, onRetryAll, onAuthFailed }: Healt
       onBack();
       return;
     }
+    if (input === 'q') {
+      onBack();
+      return;
+    }
     if (input === 'r') {
       onRetryAll();
       return;
@@ -87,13 +91,13 @@ export function HealthCheck({ results, onBack, onRetryAll, onAuthFailed }: Healt
         return (
           <Text key={result.name}>
             {colors.brandMid(`  ${box.vertical}  `)}
-            {icon}
-            {' '}
-            {result.status === 'pass' ? colors.textPrimary(paddedName) : result.status === 'fail' ? colors.error(paddedName) : colors.textPrimary(paddedName)}
-            {' '}
-            {dots}
-            {' '}
-            {detail}
+            {icon}{' '}
+            {result.status === 'pass'
+              ? colors.textPrimary(paddedName)
+              : result.status === 'fail'
+                ? colors.error(paddedName)
+                : colors.textPrimary(paddedName)}{' '}
+            {dots} {detail}
             {' '.repeat(Math.max(1, boxWidth - nameLen - detailLen(result, showDesc) - 30 + 16))}
             {colors.brandMid(box.vertical)}
           </Text>

@@ -9,12 +9,20 @@ import { Onboarding, ONBOARDING_OPTION_COUNT } from './views/Onboarding.js';
 import { EditServer } from './views/EditServer.js';
 import { AuthFlow } from './views/AuthFlow.js';
 import { HealthCheck } from './views/HealthCheck.js';
+import { AddServer } from './views/AddServer.js';
 import { Metrics } from './views/Metrics.js';
 import { Help } from './views/Help.js';
+import { Update } from './views/Update.js';
+import { Uninstall } from './views/Uninstall.js';
+import { RemoveServer } from './views/RemoveServer.js';
 import { useRegistry } from './hooks/useRegistry.js';
 import { useMetrics } from './hooks/useMetrics.js';
+import { usePool } from './hooks/usePool.js';
 import { getMenuItemCount } from './components/ActionMenu.js';
 import { setServerKeywords, removeServer } from '../registry.js';
+import { findMcpJson, importFromMcpJson, addServerToRegistry } from './actions/import-servers.js';
+import { runHealthChecks } from './actions/health-check.js';
+import { authServer } from './actions/auth.js';
 import type { TuiServerInfo } from './hooks/useRegistry.js';
 import type { AuthServerState } from './views/AuthFlow.js';
 import type { ServerCheckResult } from './views/HealthCheck.js';
@@ -29,7 +37,11 @@ type View =
   | { name: 'auth-flow'; servers: AuthServerState[] }
   | { name: 'health-check'; results: ServerCheckResult[] }
   | { name: 'metrics' }
-  | { name: 'help' };
+  | { name: 'help' }
+  | { name: 'add-server' }
+  | { name: 'update' }
+  | { name: 'uninstall' }
+  | { name: 'remove-server' };
 
 function formatUptime(): string {
   const ms = Date.now() - startTime;
@@ -46,14 +58,14 @@ function App() {
   const { exit } = useApp();
   const registry = useRegistry();
   const metrics = useMetrics();
+  const pool = usePool();
 
   // Determine initial view based on registry state
   const initialView: View = registry.totalServers === 0 ? { name: 'onboarding' } : { name: 'dashboard' };
   const [view, setView] = useState<View>(initialView);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const menuCount =
-    view.name === 'onboarding' ? ONBOARDING_OPTION_COUNT : getMenuItemCount(registry.needsAuthCount);
+  const menuCount = view.name === 'onboarding' ? ONBOARDING_OPTION_COUNT : getMenuItemCount(registry.needsAuthCount);
 
   const navigateTo = useCallback((newView: View) => {
     setView(newView);
@@ -93,6 +105,20 @@ function App() {
             toolCount: s.toolCount,
           }));
           navigateTo({ name: 'health-check', results });
+          // Kick off real health checks
+          runHealthChecks(
+            registry.servers.map((s) => s.name),
+            {
+              onResult: (name, partial) => {
+                setView((prev) => {
+                  if (prev.name !== 'health-check') return prev;
+                  const updated = prev.results.map((r) => (r.name === name ? { ...r, ...partial } : r));
+                  return { name: 'health-check', results: updated };
+                });
+              },
+              onComplete: () => {},
+            },
+          );
           break;
         }
         case 1:
@@ -100,7 +126,8 @@ function App() {
           navigateTo({ name: 'metrics' });
           break;
         case 2:
-          // Add a server — for now stay on dashboard (could trigger onboarding add flow)
+          // Add a server
+          navigateTo({ name: 'add-server' });
           break;
         case 3: {
           // Edit server — pick first connected server as default
@@ -109,57 +136,117 @@ function App() {
           break;
         }
         case 4:
-          // Remove a server — for now stay on dashboard
+          // Remove a server
+          navigateTo({ name: 'remove-server' });
           break;
         case 5:
           // Update (System)
+          navigateTo({ name: 'update' });
           break;
         case 6:
           // Uninstall (System)
+          navigateTo({ name: 'uninstall' });
           break;
       }
     },
     [registry, navigateTo],
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [importResult, setImportResult] = useState<{ imported: string[]; skipped: string[] } | null>(null);
+
   const handleOnboardingSelect = useCallback(
     (action: 'quick-setup' | 'add-manually' | 'look-around') => {
       if (action === 'look-around') {
         navigateTo({ name: 'dashboard' });
+      } else if (action === 'quick-setup') {
+        const mcpPath = findMcpJson();
+        if (mcpPath) {
+          const result = importFromMcpJson(mcpPath);
+          setImportResult(result);
+        } else {
+          setImportResult({ imported: [], skipped: [] });
+        }
+        navigateTo({ name: 'dashboard' });
+      } else if (action === 'add-manually') {
+        navigateTo({ name: 'add-server' });
       }
-      // quick-setup and add-manually will be wired to actual logic later
     },
     [navigateTo],
   );
 
-  const handleSaveTags = useCallback((serverName: string, tags: string[]) => {
-    setServerKeywords(serverName, tags);
-    goBack();
-  }, [goBack]);
+  const handleSaveTags = useCallback(
+    (serverName: string, tags: string[]) => {
+      setServerKeywords(serverName, tags);
+      goBack();
+    },
+    [goBack],
+  );
 
-  const handleDeleteServer = useCallback((serverName: string) => {
-    removeServer(serverName);
-    goBack();
-  }, [goBack]);
+  const handleDeleteServer = useCallback(
+    (serverName: string) => {
+      removeServer(serverName);
+      goBack();
+    },
+    [goBack],
+  );
 
-  const handleAuthRetry = useCallback((_serverName: string) => {
-    // TODO: re-trigger OAuth for the given server
+  const handleAddServer = useCallback(
+    (name: string, config: { transport: 'http' | 'stdio'; url?: string; command?: string; args?: string[] }) => {
+      addServerToRegistry(name, config);
+    },
+    [],
+  );
+
+  const handleAuthRetry = useCallback((serverName: string) => {
+    // Update the server's status to 'waiting' in the auth-flow view
+    setView((prev) => {
+      if (prev.name !== 'auth-flow') return prev;
+      const updated = prev.servers.map((s) =>
+        s.name === serverName ? { ...s, status: 'waiting' as const, error: undefined } : s,
+      );
+      return { name: 'auth-flow', servers: updated };
+    });
+    // Trigger OAuth discovery + browser flow
+    authServer(serverName).then((result) => {
+      setView((prev) => {
+        if (prev.name !== 'auth-flow') return prev;
+        const updated = prev.servers.map((s) =>
+          s.name === serverName
+            ? { ...s, status: result.success ? ('success' as const) : ('error' as const), error: result.error }
+            : s,
+        );
+        return { name: 'auth-flow', servers: updated };
+      });
+    });
   }, []);
 
   const handleHealthRetryAll = useCallback(() => {
-    if (view.name !== 'health-check') return;
     const results: ServerCheckResult[] = registry.servers.map((s) => ({
       name: s.name,
       status: 'testing' as const,
       toolCount: s.toolCount,
     }));
     setView({ name: 'health-check', results });
-  }, [view, registry]);
+    // Kick off real health checks
+    runHealthChecks(
+      registry.servers.map((s) => s.name),
+      {
+        onResult: (name, partial) => {
+          setView((prev) => {
+            if (prev.name !== 'health-check') return prev;
+            const updated = prev.results.map((r) => (r.name === name ? { ...r, ...partial } : r));
+            return { name: 'health-check', results: updated };
+          });
+        },
+        onComplete: () => {},
+      },
+    );
+  }, [registry]);
 
   const handleHealthAuthFailed = useCallback(() => {
-    const failedNames = view.name === 'health-check'
-      ? view.results.filter((r) => r.status === 'fail').map((r) => r.name)
-      : [];
+    const failedNames =
+      view.name === 'health-check' ? view.results.filter((r) => r.status === 'fail').map((r) => r.name) : [];
     if (failedNames.length > 0) {
       const authServers: AuthServerState[] = failedNames.map((name) => ({
         name,
@@ -203,12 +290,7 @@ function App() {
 
   switch (view.name) {
     case 'onboarding':
-      return (
-        <Onboarding
-          selectedIndex={selectedIndex}
-          onSelect={handleOnboardingSelect}
-        />
-      );
+      return <Onboarding selectedIndex={selectedIndex} onSelect={handleOnboardingSelect} />;
 
     case 'edit-server':
       return (
@@ -224,13 +306,7 @@ function App() {
       );
 
     case 'auth-flow':
-      return (
-        <AuthFlow
-          servers={view.servers}
-          onBack={goBack}
-          onRetry={handleAuthRetry}
-        />
-      );
+      return <AuthFlow servers={view.servers} onBack={goBack} onRetry={handleAuthRetry} />;
 
     case 'health-check':
       return (
@@ -243,21 +319,22 @@ function App() {
       );
 
     case 'metrics':
-      return (
-        <Metrics
-          metrics={metrics}
-          serverCount={registry.totalServers}
-          onBack={goBack}
-        />
-      );
+      return <Metrics metrics={metrics} serverCount={registry.totalServers} onBack={goBack} />;
 
     case 'help':
-      return (
-        <Help
-          version={VERSION}
-          onBack={goBack}
-        />
-      );
+      return <Help version={VERSION} onBack={goBack} />;
+
+    case 'add-server':
+      return <AddServer onBack={goBack} onAdd={handleAddServer} />;
+
+    case 'update':
+      return <Update version={VERSION} onBack={goBack} />;
+
+    case 'uninstall':
+      return <Uninstall onBack={goBack} />;
+
+    case 'remove-server':
+      return <RemoveServer servers={registry.servers} onBack={goBack} onRemove={handleDeleteServer} />;
 
     case 'dashboard':
     default:
@@ -268,6 +345,7 @@ function App() {
           version={VERSION}
           uptime={formatUptime()}
           selectedIndex={selectedIndex}
+          pool={pool}
         />
       );
   }

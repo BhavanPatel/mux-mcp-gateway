@@ -5,6 +5,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { useLayout } from '../hooks/useLayout.js';
+import { useBarFillAnimation } from '../hooks/useAnimations.js';
 import { colors } from '../styles.js';
 
 export interface BarEntry {
@@ -23,13 +24,15 @@ export function BarChart({ entries, maxBarWidth }: BarChartProps) {
   const barWidth = maxBarWidth ?? Math.min(columns - 40, 24);
   const maxValue = Math.max(...entries.map((e) => e.value), 1);
   const maxLabelLen = Math.max(...entries.map((e) => e.label.length), 1);
+  const fills = useBarFillAnimation(entries.length);
 
   return (
     <Box flexDirection="column">
-      {entries.map((entry) => {
-        const fillLen = Math.round((entry.value / maxValue) * barWidth);
-        const emptyLen = barWidth - fillLen;
-        const bar = colors.barFill('\u2588'.repeat(fillLen)) + colors.barEmpty('\u2591'.repeat(emptyLen));
+      {entries.map((entry, idx) => {
+        const targetFillLen = Math.round((entry.value / maxValue) * barWidth);
+        const animatedFillLen = Math.round(targetFillLen * (fills[idx] ?? 0));
+        const emptyLen = barWidth - animatedFillLen;
+        const bar = colors.barFill('\u2588'.repeat(animatedFillLen)) + colors.barEmpty('\u2591'.repeat(emptyLen));
         const suffix = entry.suffix ?? `${entry.value}`;
 
         return (

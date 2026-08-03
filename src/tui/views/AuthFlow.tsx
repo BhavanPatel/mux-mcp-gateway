@@ -45,6 +45,10 @@ export function AuthFlow({ servers, onBack, onRetry }: AuthFlowProps) {
       onBack();
       return;
     }
+    if (input === 'q') {
+      onBack();
+      return;
+    }
     if (input === 'r') {
       const failed = servers.find((s) => s.status === 'error');
       if (failed) onRetry(failed.name);
@@ -82,13 +86,13 @@ export function AuthFlow({ servers, onBack, onRetry }: AuthFlowProps) {
         return (
           <Text key={server.name}>
             {colors.brandMid(`  ${box.vertical}  `)}
-            {statusIcon}
-            {' '}
-            {server.status === 'success' ? colors.success(paddedName) : server.status === 'error' ? colors.error(paddedName) : colors.textPrimary(paddedName)}
-            {' '}
-            {colors.textDim('·'.repeat(Math.max(2, 24 - nameWidth)))}
-            {' '}
-            {statusText}
+            {statusIcon}{' '}
+            {server.status === 'success'
+              ? colors.success(paddedName)
+              : server.status === 'error'
+                ? colors.error(paddedName)
+                : colors.textPrimary(paddedName)}{' '}
+            {colors.textDim('·'.repeat(Math.max(2, 24 - nameWidth)))} {statusText}
             {' '.repeat(Math.max(1, boxWidth - nameWidth - statusTextLen(server) - 34 + 20))}
             {colors.brandMid(box.vertical)}
           </Text>
@@ -116,9 +120,7 @@ export function AuthFlow({ servers, onBack, onRetry }: AuthFlowProps) {
       <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
       <Text>
         {colors.brandMid(`  ${box.vertical}  `)}
-        {errorCount > 0
-          ? colors.accentDim('[r] retry failed │ [esc] back')
-          : colors.accentDim('[esc] back')}
+        {errorCount > 0 ? colors.accentDim('[r] retry failed │ [esc] back') : colors.accentDim('[esc] back')}
         {' '.repeat(Math.max(1, boxWidth - (errorCount > 0 ? 33 : 14)))}
         {colors.brandMid(box.vertical)}
       </Text>

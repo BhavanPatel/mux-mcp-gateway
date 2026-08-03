@@ -1,6 +1,10 @@
 /**
  * BoxWrapper — responsive box with title, auto-width based on terminal size.
  * Wraps content in Unicode box-drawing frame.
+ *
+ * NOTE: This is the recommended wrapper for new views. Existing views use inline
+ * box-drawing for fine-grained padding control, but new views should prefer this
+ * component for consistency. The boxWidth is available via useLayout().columns.
  */
 import React from 'react';
 import { Box, Text } from 'ink';
