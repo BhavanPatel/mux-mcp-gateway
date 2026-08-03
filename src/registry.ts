@@ -242,3 +242,35 @@ export function updateServerKeywords(name: string, keywords: string[]): void {
     // Non-critical — don't fail on keyword update
   }
 }
+
+/** Force-set keywords for a server (used by TUI edit view). */
+export function setServerKeywords(name: string, keywords: string[]): void {
+  try {
+    const raw = readFileSync(registryPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Registry;
+    if (parsed.servers[name]) {
+      parsed.servers[name].keywords = keywords;
+      writeFileSync(registryPath, JSON.stringify(parsed, null, 2), 'utf-8');
+      if (registry.servers[name]) {
+        registry.servers[name].keywords = keywords;
+      }
+    }
+  } catch {
+    // Non-critical
+  }
+}
+
+/** Remove a server from the registry file. */
+export function removeServer(name: string): boolean {
+  try {
+    const raw = readFileSync(registryPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Registry;
+    if (!parsed.servers[name]) return false;
+    delete parsed.servers[name];
+    writeFileSync(registryPath, JSON.stringify(parsed, null, 2), 'utf-8');
+    delete registry.servers[name];
+    return true;
+  } catch {
+    return false;
+  }
+}

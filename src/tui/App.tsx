@@ -14,6 +14,7 @@ import { Help } from './views/Help.js';
 import { useRegistry } from './hooks/useRegistry.js';
 import { useMetrics } from './hooks/useMetrics.js';
 import { getMenuItemCount } from './components/ActionMenu.js';
+import { setServerKeywords, removeServer } from '../registry.js';
 import type { TuiServerInfo } from './hooks/useRegistry.js';
 import type { AuthServerState } from './views/AuthFlow.js';
 import type { ServerCheckResult } from './views/HealthCheck.js';
@@ -131,13 +132,13 @@ function App() {
     [navigateTo],
   );
 
-  const handleSaveTags = useCallback((_serverName: string, _tags: string[]) => {
-    // TODO: write tags back to registry file
+  const handleSaveTags = useCallback((serverName: string, tags: string[]) => {
+    setServerKeywords(serverName, tags);
     goBack();
   }, [goBack]);
 
-  const handleDeleteServer = useCallback((_serverName: string) => {
-    // TODO: remove from registry
+  const handleDeleteServer = useCallback((serverName: string) => {
+    removeServer(serverName);
     goBack();
   }, [goBack]);
 
