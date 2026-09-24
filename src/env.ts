@@ -48,6 +48,25 @@ function parseEnvFile(path: string): void {
   }
 }
 
+/**
+ * Env var names that look like secrets/tokens worth importing from the shell
+ * profile. We deliberately do NOT import every uppercase var (that pollutes the
+ * process env with unrelated shell state and can shadow config). Matches the
+ * documented intent: "only tokens/secrets".
+ */
+const SECRET_NAME_PATTERN = /(TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|API|AUTH|ACCESS)/;
+
+function shellEnvAllowlist(): Set<string> | null {
+  const raw = process.env.MUX_ENV_ALLOWLIST;
+  if (!raw) return null;
+  return new Set(
+    raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
 function loadShellEnv(): void {
   try {
     // Run the user's login shell to get exported env vars
@@ -57,19 +76,28 @@ function loadShellEnv(): void {
       timeout: 5000,
     });
 
+    const allowlist = shellEnvAllowlist();
     let loaded = 0;
+    const skipped: string[] = [];
     for (const line of output.split('\n')) {
       const idx = line.indexOf('=');
       if (idx === -1) continue;
       const key = line.substring(0, idx);
       const val = line.substring(idx + 1);
-      // Only load vars that look like tokens/secrets and aren't already set
-      if (!process.env[key] && /^[A-Z][A-Z0-9_]*$/.test(key)) {
-        process.env[key] = val;
-        loaded++;
+      if (process.env[key]) continue; // process env takes precedence
+      if (!/^[A-Z][A-Z0-9_]*$/.test(key)) continue; // conventional env name only
+
+      // Import only explicitly allowlisted names, or names that look like secrets.
+      const wanted = allowlist ? allowlist.has(key) : SECRET_NAME_PATTERN.test(key);
+      if (!wanted) {
+        skipped.push(key);
+        continue;
       }
+      process.env[key] = val;
+      loaded++;
     }
-    if (loaded > 0) logger.debug(`Loaded ${loaded} vars from shell profile`);
+    if (loaded > 0) logger.debug(`Loaded ${loaded} secret-like vars from shell profile`);
+    if (skipped.length > 0) logger.debug(`Skipped ${skipped.length} non-secret shell vars`);
   } catch {
     // Shell env extraction failed — not critical
     logger.debug('Could not extract shell environment (non-fatal)');

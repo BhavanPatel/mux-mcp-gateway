@@ -9,7 +9,7 @@
  * { "v": 1, "enc": "<base64>", "iv": "<base64>", "tag": "<base64>" }
  */
 import { createCipheriv, createDecipheriv, randomBytes, pbkdf2Sync } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync, chmodSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, chmodSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { hostname, userInfo } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -149,6 +149,9 @@ export function readSecureJson(filePath: string): Record<string, unknown> {
 
 /**
  * Write data as encrypted JSON to a file with 0600 permissions.
+ * Atomic: writes to a unique temp file (created 0600 before any secret bytes
+ * land in it), then renames over the target. A crash or concurrent write can
+ * never leave the target truncated — readers see either the old or new file.
  */
 export function writeSecureJson(filePath: string, data: unknown): void {
   const dir = dirname(filePath);
@@ -157,6 +160,20 @@ export function writeSecureJson(filePath: string, data: unknown): void {
     chmodSync(dir, 0o700);
   }
   const encrypted = encrypt(data);
-  writeFileSync(filePath, encrypted, 'utf-8');
-  chmodSync(filePath, 0o600);
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    // Create the temp file with 0600 from the start (flag 'wx' fails if it
+    // somehow exists), so plaintext-encrypted secrets are never world-readable.
+    writeFileSync(tmpPath, encrypted, { encoding: 'utf-8', mode: 0o600, flag: 'wx' });
+    chmodSync(tmpPath, 0o600);
+    renameSync(tmpPath, filePath); // atomic on POSIX same-filesystem
+    chmodSync(filePath, 0o600);
+  } catch (err) {
+    try {
+      if (existsSync(tmpPath)) unlinkSync(tmpPath);
+    } catch {
+      /* best-effort cleanup */
+    }
+    throw err;
+  }
 }

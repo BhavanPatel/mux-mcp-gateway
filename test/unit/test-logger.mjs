@@ -1,242 +1,126 @@
 /**
- * Unit tests for logger module.
- * Run: node --test test/test-logger.mjs
+ * Unit tests for the logger module (WS-C1).
+ * Exercises the REAL dist/logger.js in a spawned process with an isolated HOME
+ * so the NDJSON file sink lands in a sandbox. Covers: dual sink, NDJSON
+ * validity, rotation, stdout-sacred, redaction of meta, correlation ids.
+ * Run: node --test test/unit/test-logger.mjs
  */
-import { describe, it, before } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
+const LOGGER = `${ROOT}/dist/logger.js`;
 
 /**
- * Helper: run a small script that uses the logger and capture stderr.
+ * Run an inline ESM script that imports the real logger, with a sandbox HOME.
+ * Returns { stdout, stderr, home }.
  */
-function runLoggerScript(level, logCall) {
-  return new Promise((resolve, reject) => {
-    const script = `
-      import { logger } from '${ROOT}/dist/index.js';
-      ${logCall}
-    `;
-    // Can't import logger directly from bundle (it's not a separate export).
-    // Instead, test the logger behavior by spawning a process that writes to stderr.
-    const proc = spawn(
-      'node',
-      [
-        '--input-type=module',
-        '-e',
-        `
-      process.env.MUX_LOG_LEVEL = '${level}';
-      // Re-implement logger inline to test the logic
-      const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
-      const currentLevel = '${level}';
-      function log(lvl, msg, meta) {
-        if (LEVELS[lvl] > LEVELS[currentLevel]) return;
-        const ts = new Date().toISOString();
-        const suffix = meta ? ' ' + JSON.stringify(meta) : '';
-        process.stderr.write('[MUX] [' + lvl + '] [' + ts + '] ' + msg + suffix + '\\n');
-      }
-      ${logCall.replace('logger.', 'log("' + logCall.match(/logger\.(\w+)/)?.[1] + '", ')}
-    `,
-      ],
-      { env: { ...process.env, MUX_LOG_LEVEL: level } },
-    );
-
+function runWithLogger(body, env = {}) {
+  const home = mkdtempSync(resolve(tmpdir(), 'mux-log-'));
+  const script = `
+    import { logger, newCorrelationId } from ${JSON.stringify(LOGGER)};
+    ${body}
+  `;
+  return new Promise((resolvePromise, reject) => {
+    const proc = spawn('node', ['--input-type=module', '-e', script], {
+      env: { ...process.env, HOME: home, ...env },
+    });
+    let stdout = '';
     let stderr = '';
+    proc.stdout.on('data', (d) => (stdout += d.toString()));
     proc.stderr.on('data', (d) => (stderr += d.toString()));
-    proc.on('close', () => resolve(stderr));
+    proc.on('close', () => resolvePromise({ stdout, stderr, home }));
     proc.on('error', reject);
   });
 }
 
-describe('logger level filtering', () => {
-  const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
+function readLog(home) {
+  const p = resolve(home, '.mux', 'mux.log');
+  return existsSync(p) ? readFileSync(p, 'utf-8') : '';
+}
 
-  it('error level only shows errors', () => {
-    // When level is 'error', only error messages pass (level 0 <= 0)
-    assert.ok(LEVELS['error'] <= LEVELS['error']);
-    assert.ok(LEVELS['warn'] > LEVELS['error']);
-    assert.ok(LEVELS['info'] > LEVELS['error']);
-    assert.ok(LEVELS['debug'] > LEVELS['error']);
+const sandboxes = [];
+after(() => {
+  for (const h of sandboxes) rmSync(h, { recursive: true, force: true });
+});
+
+describe('logger dual sink', () => {
+  it('writes a human line to stderr and NDJSON to the file', async () => {
+    const { stdout, stderr, home } = await runWithLogger(`logger.info('hello world', { a: 1 });`);
+    sandboxes.push(home);
+    // stdout stays sacred
+    assert.equal(stdout, '');
+    // human sink
+    assert.match(stderr, /\[MUX\] \[info\]/);
+    assert.ok(stderr.includes('hello world'));
+    // structured sink: one valid JSON object per line
+    const lines = readLog(home).split('\n').filter(Boolean);
+    assert.ok(lines.length >= 1);
+    for (const line of lines) {
+      const obj = JSON.parse(line); // throws if not valid NDJSON
+      assert.equal(typeof obj.ts, 'string');
+      assert.equal(typeof obj.level, 'string');
+      assert.equal(typeof obj.msg, 'string');
+    }
+    const rec = JSON.parse(lines.at(-1));
+    assert.equal(rec.msg, 'hello world');
+    assert.equal(rec.a, 1);
   });
 
-  it('warn level shows errors and warnings', () => {
-    assert.ok(LEVELS['error'] <= LEVELS['warn']);
-    assert.ok(LEVELS['warn'] <= LEVELS['warn']);
-    assert.ok(LEVELS['info'] > LEVELS['warn']);
-    assert.ok(LEVELS['debug'] > LEVELS['warn']);
-  });
-
-  it('info level shows error, warn, info', () => {
-    assert.ok(LEVELS['error'] <= LEVELS['info']);
-    assert.ok(LEVELS['warn'] <= LEVELS['info']);
-    assert.ok(LEVELS['info'] <= LEVELS['info']);
-    assert.ok(LEVELS['debug'] > LEVELS['info']);
-  });
-
-  it('debug level shows everything', () => {
-    assert.ok(LEVELS['error'] <= LEVELS['debug']);
-    assert.ok(LEVELS['warn'] <= LEVELS['debug']);
-    assert.ok(LEVELS['info'] <= LEVELS['debug']);
-    assert.ok(LEVELS['debug'] <= LEVELS['debug']);
+  it('MUX_LOG_TO_FILE=false disables the file sink', async () => {
+    const { home, stderr } = await runWithLogger(`logger.info('no file please');`, { MUX_LOG_TO_FILE: 'false' });
+    sandboxes.push(home);
+    assert.ok(stderr.includes('no file please'));
+    assert.equal(readLog(home), '');
   });
 });
 
-describe('logger output format', () => {
-  it('includes [MUX] prefix', async () => {
-    const output = await new Promise((resolve) => {
-      const proc = spawn('node', [
-        '--input-type=module',
-        '-e',
-        `
-        const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
-        function log(level, msg, meta) {
-          if (LEVELS[level] > LEVELS['info']) return;
-          const ts = new Date().toISOString();
-          const suffix = meta ? ' ' + JSON.stringify(meta) : '';
-          process.stderr.write('[MUX] [' + level + '] [' + ts + '] ' + msg + suffix + '\\n');
-        }
-        log('info', 'test message');
-      `,
-      ]);
-      let stderr = '';
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.on('close', () => resolve(stderr));
-    });
-    assert.ok(output.includes('[MUX]'));
-    assert.ok(output.includes('[info]'));
-    assert.ok(output.includes('test message'));
-  });
-
-  it('includes ISO timestamp', async () => {
-    const output = await new Promise((resolve) => {
-      const proc = spawn('node', [
-        '--input-type=module',
-        '-e',
-        `
-        const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
-        function log(level, msg) {
-          const ts = new Date().toISOString();
-          process.stderr.write('[MUX] [' + level + '] [' + ts + '] ' + msg + '\\n');
-        }
-        log('error', 'timestamp test');
-      `,
-      ]);
-      let stderr = '';
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.on('close', () => resolve(stderr));
-    });
-    // ISO timestamp pattern: 2026-07-15T04:30:07.016Z
-    assert.match(output, /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]/);
-  });
-
-  it('appends JSON meta when provided', async () => {
-    const output = await new Promise((resolve) => {
-      const proc = spawn('node', [
-        '--input-type=module',
-        '-e',
-        `
-        const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
-        function log(level, msg, meta) {
-          const ts = new Date().toISOString();
-          const suffix = meta ? ' ' + JSON.stringify(meta) : '';
-          process.stderr.write('[MUX] [' + level + '] [' + ts + '] ' + msg + suffix + '\\n');
-        }
-        log('warn', 'with meta', { key: 'value', count: 42 });
-      `,
-      ]);
-      let stderr = '';
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.on('close', () => resolve(stderr));
-    });
-    assert.ok(output.includes('{"key":"value","count":42}'));
-  });
-
-  it('writes to stderr not stdout', async () => {
-    const result = await new Promise((resolve) => {
-      const proc = spawn('node', [
-        '--input-type=module',
-        '-e',
-        `
-        const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
-        function log(level, msg) {
-          const ts = new Date().toISOString();
-          process.stderr.write('[MUX] [' + level + '] [' + ts + '] ' + msg + '\\n');
-        }
-        log('info', 'stderr check');
-      `,
-      ]);
-      let stdout = '',
-        stderr = '';
-      proc.stdout.on('data', (d) => (stdout += d.toString()));
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.on('close', () => resolve({ stdout, stderr }));
-    });
-    assert.equal(result.stdout, '');
-    assert.ok(result.stderr.includes('stderr check'));
+describe('logger redaction', () => {
+  it('redacts secret-keyed meta in both sinks', async () => {
+    const { stderr, home } = await runWithLogger(`logger.info('auth', { token: 'ghp_0123456789abcdefghijABCDEF' });`);
+    sandboxes.push(home);
+    const file = readLog(home);
+    assert.ok(!stderr.includes('ghp_0123456789abcdefghijABCDEF'), 'secret leaked to stderr');
+    assert.ok(!file.includes('ghp_0123456789abcdefghijABCDEF'), 'secret leaked to file');
+    assert.ok(stderr.includes('[redacted]'));
   });
 });
 
-describe('logger level from environment', () => {
-  it('MUX_LOG_LEVEL=error suppresses info messages', async () => {
-    const output = await new Promise((resolve) => {
-      const proc = spawn(
-        'node',
-        [
-          '--input-type=module',
-          '-e',
-          `
-        const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
-        const currentLevel = process.env.MUX_LOG_LEVEL || 'info';
-        function log(level, msg) {
-          if (LEVELS[level] > LEVELS[currentLevel]) return;
-          process.stderr.write('[MUX] [' + level + '] ' + msg + '\\n');
-        }
-        log('info', 'should not appear');
-        log('error', 'should appear');
-      `,
-        ],
-        { env: { ...process.env, MUX_LOG_LEVEL: 'error' } },
-      );
-      let stderr = '';
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.on('close', () => resolve(stderr));
-    });
-    assert.ok(!output.includes('should not appear'));
-    assert.ok(output.includes('should appear'));
+describe('logger correlation ids', () => {
+  it('threads a consistent cid across a child logger', async () => {
+    const { home } = await runWithLogger(`
+      const cid = newCorrelationId();
+      const log = logger.child(cid);
+      log.info('first');
+      log.warn('second');
+    `);
+    sandboxes.push(home);
+    const lines = readLog(home)
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+    const cids = new Set(lines.map((l) => l.cid));
+    assert.equal(cids.size, 1, 'all lines should share one cid');
+    assert.ok([...cids][0].length > 0);
   });
+});
 
-  it('MUX_LOG_LEVEL=debug shows all messages', async () => {
-    const output = await new Promise((resolve) => {
-      const proc = spawn(
-        'node',
-        [
-          '--input-type=module',
-          '-e',
-          `
-        const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
-        const currentLevel = process.env.MUX_LOG_LEVEL || 'info';
-        function log(level, msg) {
-          if (LEVELS[level] > LEVELS[currentLevel]) return;
-          process.stderr.write('[MUX] [' + level + '] ' + msg + '\\n');
-        }
-        log('debug', 'debug msg');
-        log('info', 'info msg');
-        log('warn', 'warn msg');
-        log('error', 'error msg');
-      `,
-        ],
-        { env: { ...process.env, MUX_LOG_LEVEL: 'debug' } },
-      );
-      let stderr = '';
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.on('close', () => resolve(stderr));
-    });
-    assert.ok(output.includes('debug msg'));
-    assert.ok(output.includes('info msg'));
-    assert.ok(output.includes('warn msg'));
-    assert.ok(output.includes('error msg'));
+describe('logger rotation', () => {
+  it('rotates to mux.log.1 when the size cap is exceeded', async () => {
+    // Tiny cap so a couple of lines trip rotation.
+    const { home } = await runWithLogger(
+      `for (let i = 0; i < 50; i++) logger.info('padding line ' + i + ' ' + 'x'.repeat(50));`,
+      { MUX_LOG_MAX_BYTES: '200' },
+    );
+    sandboxes.push(home);
+    const rotated = resolve(home, '.mux', 'mux.log.1');
+    assert.ok(existsSync(rotated), 'rotated file should exist');
+    assert.ok(readLog(home).length > 0);
   });
 });

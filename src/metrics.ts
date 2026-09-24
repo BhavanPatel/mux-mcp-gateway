@@ -21,6 +21,13 @@ interface MetricsStore {
 let store: MetricsStore = { events: [], firstSeen: Date.now() };
 let dirty = false;
 
+/**
+ * Telemetry is LOCAL-ONLY (written to ~/.mux/metrics.json, never transmitted).
+ * Respect the standard opt-out env vars anyway: when set, Mux records nothing
+ * and writes nothing. See TELEMETRY.md.
+ */
+const telemetryDisabled = Boolean(process.env.MUX_NO_TELEMETRY) || Boolean(process.env.DO_NOT_TRACK);
+
 function ensureDir() {
   const dir = dirname(METRICS_PATH);
   if (!existsSync(dir)) {
@@ -44,6 +51,7 @@ function persist(): void {
   try {
     ensureDir();
     writeFileSync(METRICS_PATH, JSON.stringify(store), 'utf-8');
+    chmodSync(METRICS_PATH, 0o600); // local-only data — owner read/write only
     dirty = false;
   } catch (err: any) {
     logger.debug(`Failed to persist metrics: ${err.message}`);
@@ -51,6 +59,7 @@ function persist(): void {
 }
 
 export function record(event: MetricEvent): void {
+  if (telemetryDisabled) return; // opt-out: record nothing
   store.events.push(event);
   dirty = true;
   // Persist every 10 events or on important events
@@ -94,8 +103,14 @@ export interface AggregatedMetrics {
   avgResponseMs: number;
   topServers: Array<{ name: string; calls: number }>;
   contextReductionPct: number;
-  estimatedTokensSaved: number;
 }
+
+/**
+ * Number of tools Mux exposes to the model, regardless of how many downstream
+ * servers/tools exist: mux_list_servers, mux_call_tool, mux_find_tool,
+ * mux_status. This is a real, fixed count (see server.ts), not an estimate.
+ */
+const MUX_EXPOSED_TOOL_COUNT = 4;
 
 function aggregate(since: number): Omit<AggregatedMetrics, 'period'> {
   const events = store.events.filter((e) => e.ts >= since);
@@ -121,17 +136,15 @@ function aggregate(since: number): Omit<AggregatedMetrics, 'period'> {
     .slice(0, 5)
     .map(([name, count]) => ({ name, calls: count }));
 
-  // Context reduction: without Mux all downstream tools are in context.
-  // With Mux only 4 tools are exposed. Calculate % reduction from spawn toolCounts.
+  // Context reduction is MEASURED, not estimated: without Mux every downstream
+  // tool sits in the model's context; with Mux only MUX_EXPOSED_TOOL_COUNT do.
+  // Downstream tool counts come from real spawn events (spawn.toolCount).
   const spawnToolCounts = spawns.filter((e) => e.toolCount).map((e) => e.toolCount!);
   const totalDownstreamTools = spawnToolCounts.length > 0 ? spawnToolCounts.reduce((a, b) => a + b, 0) : 0;
-  const muxTools = 4;
   const contextReductionPct =
-    totalDownstreamTools > muxTools ? Math.round((1 - muxTools / totalDownstreamTools) * 100) : 0;
-
-  // Tokens saved estimate: ~200 tokens per tool definition, per message round-trip
-  const tokensPerTool = 200;
-  const estimatedTokensSaved = calls.length * Math.max(0, totalDownstreamTools - muxTools) * tokensPerTool;
+    totalDownstreamTools > MUX_EXPOSED_TOOL_COUNT
+      ? Math.round((1 - MUX_EXPOSED_TOOL_COUNT / totalDownstreamTools) * 100)
+      : 0;
 
   return {
     totalCalls: calls.length,
@@ -144,7 +157,6 @@ function aggregate(since: number): Omit<AggregatedMetrics, 'period'> {
     avgResponseMs,
     topServers,
     contextReductionPct,
-    estimatedTokensSaved,
   };
 }
 
@@ -161,7 +173,6 @@ export function getQuickStats(): {
   totalCalls: number;
   upSince: string;
   contextReductionPct: number;
-  estimatedTokensSaved: number;
   topServer: string;
 } {
   const all = aggregate(0);
@@ -169,9 +180,25 @@ export function getQuickStats(): {
     totalCalls: all.totalCalls,
     upSince: new Date(store.firstSeen).toISOString().split('T')[0],
     contextReductionPct: all.contextReductionPct,
-    estimatedTokensSaved: all.estimatedTokensSaved,
     topServer: all.topServers[0]?.name || 'none',
   };
+}
+
+/**
+ * Real per-day call counts for the last `days` days, oldest first. Each bucket
+ * is the measured number of `call` events whose ts falls in that local day.
+ * No synthesis, no weighting — every bar is a real count. (WS-C5)
+ */
+export function getDailyActivity(days: number): number[] {
+  const counts = new Array(days).fill(0);
+  const startOfToday = new Date().setHours(0, 0, 0, 0);
+  for (const e of store.events) {
+    if (e.type !== 'call') continue;
+    const dayStart = new Date(e.ts).setHours(0, 0, 0, 0);
+    const idx = days - 1 - Math.round((startOfToday - dayStart) / 86400_000);
+    if (idx >= 0 && idx < days) counts[idx] += 1;
+  }
+  return counts;
 }
 
 // Prune events older than 6 months to prevent unbounded growth

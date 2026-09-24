@@ -2,49 +2,49 @@
  * TUI Root — renders the Ink application.
  * State-aware: detects if registry exists and routes between views.
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { render, useApp, useInput } from 'ink';
 import { Dashboard } from './views/Dashboard.js';
 import { Onboarding, ONBOARDING_OPTION_COUNT } from './views/Onboarding.js';
 import { EditServer } from './views/EditServer.js';
+import { EditPicker } from './views/EditPicker.js';
 import { AuthFlow } from './views/AuthFlow.js';
 import { HealthCheck } from './views/HealthCheck.js';
 import { AddServer } from './views/AddServer.js';
 import { Metrics } from './views/Metrics.js';
 import { Help } from './views/Help.js';
-import { Update } from './views/Update.js';
-import { Uninstall } from './views/Uninstall.js';
 import { RemoveServer } from './views/RemoveServer.js';
 import { useRegistry } from './hooks/useRegistry.js';
 import { useMetrics } from './hooks/useMetrics.js';
 import { usePool } from './hooks/usePool.js';
 import { getMenuItemCount } from './components/ActionMenu.js';
 import { setServerKeywords, removeServer } from '../registry.js';
+import type { RemoveServerResult } from '../registry.js';
+import { VERSION } from '../version.js';
 import { findMcpJson, importFromMcpJson, addServerToRegistry } from './actions/import-servers.js';
+import type { ImportResult } from './actions/import-servers.js';
 import { runHealthChecks } from './actions/health-check.js';
 import { authServer } from './actions/auth.js';
 import type { TuiServerInfo } from './hooks/useRegistry.js';
 import type { AuthServerState } from './views/AuthFlow.js';
 import type { ServerCheckResult } from './views/HealthCheck.js';
 
-const VERSION = '1.4.2';
 const startTime = Date.now();
 
 type View =
   | { name: 'dashboard' }
   | { name: 'onboarding' }
   | { name: 'edit-server'; server: TuiServerInfo }
+  | { name: 'edit-picker' }
   | { name: 'auth-flow'; servers: AuthServerState[] }
   | { name: 'health-check'; results: ServerCheckResult[] }
   | { name: 'metrics' }
   | { name: 'help' }
   | { name: 'add-server' }
-  | { name: 'update' }
-  | { name: 'uninstall' }
   | { name: 'remove-server' };
 
-function formatUptime(): string {
-  const ms = Date.now() - startTime;
+function formatUptime(now: number): string {
+  const ms = now - startTime;
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
@@ -59,6 +59,15 @@ function App() {
   const registry = useRegistry();
   const metrics = useMetrics();
   const pool = usePool();
+
+  // Drive a 1s re-render so the dashboard uptime advances. This is the TUI
+  // session uptime (this process's start), not gateway uptime — the gateway
+  // runs as a separate process and exposes no start timestamp to the TUI.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Determine initial view based on registry state
   const initialView: View = registry.totalServers === 0 ? { name: 'onboarding' } : { name: 'dashboard' };
@@ -130,30 +139,21 @@ function App() {
           navigateTo({ name: 'add-server' });
           break;
         case 3: {
-          // Edit server — pick first connected server as default
-          const target = registry.servers[0];
-          if (target) navigateTo({ name: 'edit-server', server: target });
+          // Edit server — open a picker so the user chooses which server to
+          // edit (was: always registry.servers[0] regardless of selection).
+          navigateTo({ name: 'edit-picker' });
           break;
         }
         case 4:
           // Remove a server
           navigateTo({ name: 'remove-server' });
           break;
-        case 5:
-          // Update (System)
-          navigateTo({ name: 'update' });
-          break;
-        case 6:
-          // Uninstall (System)
-          navigateTo({ name: 'uninstall' });
-          break;
       }
     },
     [registry, navigateTo],
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [importResult, setImportResult] = useState<{ imported: string[]; skipped: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const handleOnboardingSelect = useCallback(
     (action: 'quick-setup' | 'add-manually' | 'look-around') => {
@@ -162,8 +162,7 @@ function App() {
       } else if (action === 'quick-setup') {
         const mcpPath = findMcpJson();
         if (mcpPath) {
-          const result = importFromMcpJson(mcpPath);
-          setImportResult(result);
+          void importFromMcpJson(mcpPath).then(setImportResult);
         } else {
           setImportResult({ imported: [], skipped: [] });
         }
@@ -184,16 +183,17 @@ function App() {
   );
 
   const handleDeleteServer = useCallback(
-    (serverName: string) => {
-      removeServer(serverName);
-      goBack();
+    // Returns the outcome so the calling view can surface not-found / write-failed
+    // instead of assuming success. Navigation is the caller's responsibility.
+    (serverName: string): Promise<RemoveServerResult> => {
+      return removeServer(serverName);
     },
-    [goBack],
+    [],
   );
 
   const handleAddServer = useCallback(
     (name: string, config: { transport: 'http' | 'stdio'; url?: string; command?: string; args?: string[] }) => {
-      addServerToRegistry(name, config);
+      void addServerToRegistry(name, config).catch(() => {});
     },
     [],
   );
@@ -292,6 +292,15 @@ function App() {
     case 'onboarding':
       return <Onboarding selectedIndex={selectedIndex} onSelect={handleOnboardingSelect} />;
 
+    case 'edit-picker':
+      return (
+        <EditPicker
+          servers={registry.servers}
+          onBack={goBack}
+          onSelect={(server) => navigateTo({ name: 'edit-server', server })}
+        />
+      );
+
     case 'edit-server':
       return (
         <EditServer
@@ -327,12 +336,6 @@ function App() {
     case 'add-server':
       return <AddServer onBack={goBack} onAdd={handleAddServer} />;
 
-    case 'update':
-      return <Update version={VERSION} onBack={goBack} />;
-
-    case 'uninstall':
-      return <Uninstall onBack={goBack} />;
-
     case 'remove-server':
       return <RemoveServer servers={registry.servers} onBack={goBack} onRemove={handleDeleteServer} />;
 
@@ -343,9 +346,10 @@ function App() {
           registry={registry}
           metrics={metrics}
           version={VERSION}
-          uptime={formatUptime()}
+          uptime={formatUptime(now)}
           selectedIndex={selectedIndex}
           pool={pool}
+          importResult={importResult}
         />
       );
   }

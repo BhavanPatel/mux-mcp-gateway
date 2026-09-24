@@ -14,10 +14,9 @@
   <a href="docs/cli.md"><img src="https://img.shields.io/badge/CLI_Reference-docs-f59e0b?style=flat-square&logo=gnubash&logoColor=white" alt="CLI"></a>
   <a href="docs/auth.md"><img src="https://img.shields.io/badge/Auth-docs-10b981?style=flat-square&logo=letsencrypt&logoColor=white" alt="Auth"></a>
   <br/>
-  <img src="https://img.shields.io/badge/version-1.0.0-a78bfa?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.0.0-a78bfa?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node">
   <img src="https://img.shields.io/badge/MCP_SDK-1.12.1-a78bfa?style=flat-square" alt="MCP SDK">
-  <img src="https://img.shields.io/badge/tests-46_passing-10b981?style=flat-square" alt="Tests">
   <img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="License">
   <br/><br/>
   <a href="https://mux-gateway.vercel.app"><strong>Visit the Website</strong></a>
@@ -104,7 +103,7 @@ curl -sL https://mux-gateway.vercel.app/install.sh | bash
 Then run:
 
 ```bash
-mux-cli
+mux
 ```
 
 That's it. Mux imports your existing MCP config, patches your AI client, and you're done.
@@ -128,7 +127,7 @@ Your AI only sees **4 tools** regardless of how many servers are registered.
 
 | | |
 |:--|:--|
-| <a href="docs/cli.md"><img src="https://img.shields.io/badge/CLI_Reference-a78bfa?style=flat-square&logo=gnubash&logoColor=white" alt="CLI"></a> | [All `mux-cli` commands — setup, add, remove, auth, health, metrics, keywords](docs/cli.md) |
+| <a href="docs/cli.md"><img src="https://img.shields.io/badge/CLI_Reference-a78bfa?style=flat-square&logo=gnubash&logoColor=white" alt="CLI"></a> | [All `mux` commands — serve, add, remove, edit, auth, health, metrics, doctor, logs](docs/cli.md) |
 | <a href="docs/config.md"><img src="https://img.shields.io/badge/Configuration-a78bfa?style=flat-square&logo=json&logoColor=white" alt="Config"></a> | [`servers.json` schema, environment variables, hot-reload registry](docs/config.md) |
 | <a href="docs/clients.md"><img src="https://img.shields.io/badge/Client_Integration-a78bfa?style=flat-square&logo=databricks&logoColor=white" alt="Clients"></a> | [Setup guides for Kiro, Cursor, and Claude Desktop](docs/clients.md) |
 | <a href="docs/architecture.md"><img src="https://img.shields.io/badge/Architecture-7c3aed?style=flat-square&logo=buffer&logoColor=white" alt="Architecture"></a> | [System design, pool manager, transport layer, data flow](docs/architecture.md) |
@@ -156,16 +155,19 @@ This means:
 ## Quick CLI Reference
 
 ```bash
-mux-cli setup              # Import from existing mcp.json
-mux-cli add <name> '<json>'  # Add a server
-mux-cli remove <name>      # Remove a server
-mux-cli auth --all         # Authorize all HTTP servers
-mux-cli health             # Health check
-mux-cli list               # Show servers + status
-mux-cli metrics            # Usage insights dashboard
-mux-cli keywords [name]    # View/edit keywords
-mux-cli update             # Update to latest version
-mux-cli uninstall          # Remove Mux completely
+mux                                  # Interactive TUI dashboard (TTY)
+mux serve                            # Run the MCP gateway on stdio
+mux add <name> --transport <http|stdio>  # Add a server
+mux remove <name>                    # Remove a server
+mux edit <name>                      # Edit a server's keywords
+mux auth <name>                      # Authorize an HTTP server
+mux health [name]                    # Health check
+mux metrics                          # Usage insights dashboard
+mux doctor                           # Diagnose common issues
+mux logs                             # View gateway logs
+mux report-bug                       # Open a pre-filled bug report
+mux update                           # Update to latest version
+mux uninstall                        # Remove Mux completely
 ```
 
 ---

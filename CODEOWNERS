@@ -1,0 +1,14 @@
+# Code owners for Mux.
+# These owners are requested for review on every PR that touches matching paths.
+# Docs: https://docs.github.com/articles/about-code-owners
+
+# Default owner for everything in the repo.
+*                       @BhavanPatel
+
+# Release engineering, security, and CI are especially sensitive.
+/.github/               @BhavanPatel
+/.hooks/                @BhavanPatel
+/LICENSE                @BhavanPatel
+/SECURITY.md            @BhavanPatel
+/src/auth/              @BhavanPatel
+/src/redact.ts          @BhavanPatel

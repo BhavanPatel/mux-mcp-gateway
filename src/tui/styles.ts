@@ -3,6 +3,14 @@
  * Implements the color system from the CLI redesign spec.
  */
 import chalk from 'chalk';
+import { envFlags } from './env-flags.js';
+
+// WS-B3: honour NO_COLOR / --no-color / --plain (FORCE_COLOR wins). Setting the
+// chalk level to 0 turns every colour token below into an identity function, so
+// no call site needs to change. Must run before the palette is constructed.
+if (envFlags.noColor) {
+  chalk.level = 0;
+}
 
 // Terminal capability detection
 const SUPPORTS_256 =
@@ -47,30 +55,53 @@ export const colors = SUPPORTS_256
       chartLow: chalk.gray.dim,
     };
 
-// Status symbols
-export const symbols = {
-  connected: '●',
-  disconnected: '○',
-  connecting: '◌',
-  selected: '▸',
-  success: '✓',
-  error: '✗',
-  pending: '·',
-  attention: '◆',
-  actions: '◇',
-  system: '○',
-  scrollMore: '▼',
-} as const;
+// Status symbols — ASCII fallbacks under --plain (no Unicode glyphs).
+export const symbols: Record<string, string> = envFlags.plain
+  ? {
+      connected: '*',
+      disconnected: 'o',
+      connecting: '.',
+      selected: '>',
+      success: '+',
+      error: 'x',
+      pending: '.',
+      attention: '!',
+      actions: '-',
+      system: 'o',
+      scrollMore: 'v',
+    }
+  : {
+      connected: '●',
+      disconnected: '○',
+      connecting: '◌',
+      selected: '▸',
+      success: '✓',
+      error: '✗',
+      pending: '·',
+      attention: '◆',
+      actions: '◇',
+      system: '○',
+      scrollMore: '▼',
+    };
 
-// Box drawing characters
-export const box = {
-  topLeft: '╭',
-  topRight: '╮',
-  bottomLeft: '╰',
-  bottomRight: '╯',
-  horizontal: '─',
-  vertical: '│',
-} as const;
+// Box drawing characters — ASCII fallbacks under --plain.
+export const box: Record<string, string> = envFlags.plain
+  ? {
+      topLeft: '+',
+      topRight: '+',
+      bottomLeft: '+',
+      bottomRight: '+',
+      horizontal: '-',
+      vertical: '|',
+    }
+  : {
+      topLeft: '╭',
+      topRight: '╮',
+      bottomLeft: '╰',
+      bottomRight: '╯',
+      horizontal: '─',
+      vertical: '│',
+    };
 
 // ASCII banner lines (no color — color applied by Banner component via ink-gradient)
 export const BANNER_LINES = [

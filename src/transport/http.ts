@@ -3,7 +3,31 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { ServerConfig } from '../registry.js';
 import { logger } from '../logger.js';
-import { MuxOAuthProvider } from '../auth/mcp-oauth-provider.js';
+import { createAuthProvider } from '../auth/index.js';
+import { VERSION } from '../version.js';
+
+/** Wrap a promise so it rejects if it hasn't settled within `ms`. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+    if (typeof timer.unref === 'function') timer.unref();
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+/** Timeout for a single connect() / finishAuth() step after the user acts. */
+const CONNECT_TIMEOUT_MS = 30_000;
 
 export interface HttpDownstreamConnection {
   client: Client;
@@ -59,7 +83,7 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
   const transportNoAuth = new StreamableHTTPClientTransport(new URL(config.url), {
     requestInit: { headers: config.headers || {} },
   });
-  const clientNoAuth = new Client({ name: `mux->${name}`, version: '0.1.0' });
+  const clientNoAuth = new Client({ name: `mux->${name}`, version: VERSION });
 
   try {
     await clientNoAuth.connect(transportNoAuth);
@@ -100,7 +124,7 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
     // --- Phase 3: Server supports OAuth — do the full auth flow ---
     logger.info(`OAuth discovery confirmed for "${name}", starting authorization flow...`);
 
-    const authProvider = new MuxOAuthProvider(name, {
+    const authProvider = createAuthProvider(name, {
       clientId: config.auth?.clientId,
       scopes: config.auth?.scopes,
     });
@@ -110,10 +134,10 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
       requestInit: { headers: config.headers || {} },
     });
 
-    const client = new Client({ name: `mux->${name}`, version: '0.1.0' });
+    const client = new Client({ name: `mux->${name}`, version: VERSION });
 
     try {
-      await client.connect(transport);
+      await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, `connect("${name}")`);
     } catch (authErr: any) {
       const isAuthErr =
         authErr instanceof UnauthorizedError ||
@@ -126,32 +150,44 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
 
       logger.info(`OAuth flow triggered for "${name}", waiting for browser authorization...`);
 
-      // Wait for the user to authorize — callback server or token polling will resolve
-      const code = await authProvider.waitForAuthCode();
-
-      if (code) {
-        // If token was saved externally (redirect flow), skip finishAuth
-        if (code === '__TOKEN_ALREADY_SAVED__') {
-          logger.info(`Token already saved for "${name}" (external auth flow), reconnecting...`);
-        } else {
-          logger.info(`Auth code received for "${name}", exchanging for token...`);
-          await transport.finishAuth(code);
+      // Wait for the user to authorize. This now REJECTS with the real cause
+      // (denied, port-in-use, no browser, state mismatch, timeout) instead of
+      // resolving to null — so no failure collapses into a generic message.
+      let code: string;
+      try {
+        code = await authProvider.waitForAuthCode();
+      } finally {
+        // The first auth transport is done regardless of outcome — close it so
+        // it can't leak an open handle while we build the reconnect transport.
+        try {
+          await transport.close();
+        } catch {
+          /* ignore */
         }
-
-        // Retry connection with the new token
-        const client2 = new Client({ name: `mux->${name}`, version: '0.1.0' });
-        const transport2 = new StreamableHTTPClientTransport(new URL(config.url), {
-          authProvider,
-          requestInit: { headers: config.headers || {} },
-        });
-        await client2.connect(transport2);
-
-        const { tools } = await client2.listTools();
-        logger.info(`Connected to ${name} (HTTP): ${tools.length} tools available`);
-        return { client: client2, transport: transport2, tools };
       }
 
-      throw new Error(`Authorization for "${name}" was not completed.`);
+      logger.info(`Auth code received for "${name}", exchanging for token...`);
+      const authTransport = new StreamableHTTPClientTransport(new URL(config.url), {
+        authProvider,
+        requestInit: { headers: config.headers || {} },
+      });
+      try {
+        // finishAuth hits the token endpoint; the reconnect re-negotiates with
+        // the new token. Both are bounded so a hung endpoint can't wedge us.
+        await withTimeout(authTransport.finishAuth(code), CONNECT_TIMEOUT_MS, `finishAuth("${name}")`);
+        const client2 = new Client({ name: `mux->${name}`, version: VERSION });
+        await withTimeout(client2.connect(authTransport), CONNECT_TIMEOUT_MS, `reconnect("${name}")`);
+        const { tools } = await client2.listTools();
+        logger.info(`Connected to ${name} (HTTP): ${tools.length} tools available`);
+        return { client: client2, transport: authTransport, tools };
+      } catch (exchangeErr) {
+        try {
+          await authTransport.close();
+        } catch {
+          /* ignore */
+        }
+        throw exchangeErr;
+      }
     }
 
     const { tools } = await client.listTools();

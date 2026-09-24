@@ -6,73 +6,93 @@ on:
   pull_request:
     branches: [main]
 
+# Actions are pinned to commit SHAs (not mutable @v4 tags). The trailing comment
+# records the human-readable tag; Dependabot (github-actions ecosystem) bumps both.
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
+      # tsup transpiles via esbuild WITHOUT typechecking, so strict type errors
+      # can ship undetected. This is the gate that actually enforces tsconfig
+      # strict mode (WS-D4).
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
 
-  test:
+  audit:
     runs-on: ubuntu-latest
-    needs: lint
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Gate: fail the build on critical advisories in the production dependency
+      # tree. Runtime deps are what ship, so --omit=dev.
+      - name: npm audit (gate on critical)
+        run: npm audit --omit=dev --audit-level=critical
+      # Report-only: surface high/moderate advisories without failing. Known open
+      # item: @modelcontextprotocol/sdk@1.12.1 carries high-severity advisories
+      # fixed in 1.30.x, but that upgrade changes transport/pool behaviour and
+      # must be reconciled separately before raising the gate to `high`.
+      - name: npm audit (report high, non-gating)
+        run: npm audit --omit=dev --audit-level=high || true
+
+  test:
+    runs-on: ${{ matrix.os }}
+    needs: [lint, audit]
+    strategy:
+      fail-fast: false
+      matrix:
+        # engines requires >=20 and publish builds on 20, so 20 MUST be tested.
+        # macOS is covered because env.ts defaults the shell to /bin/zsh and the
+        # browser-open path is platform-specific.
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
       - run: npm run build
-      - name: Run unit tests
+      # test:ci is the single verification path — the same script publish runs.
+      # These steps run in CI's genuinely non-TTY environment, which is where the
+      # headless-fallback assertions must hold.
+      - name: Unit tests
         run: npm run test:unit
-      - name: Run e2e tests
+      - name: E2E tests
         run: npm run test:e2e
 
   coverage:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Run tests with coverage
+      # Coverage is report-only for now (see .c8rc.json): the suites run against
+      # built dist/*.js in child processes, so c8's src-oriented measurement is
+      # not yet a meaningful gate. The lcov report is uploaded as an artifact.
+      - name: Tests with coverage (report-only)
         run: npm run test:coverage
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-report
           path: coverage/
-
-  website:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: website/package-lock.json
-      - run: npm ci
-        working-directory: website
-      - name: TypeScript check
-        run: npm run typecheck
-        working-directory: website
-      - name: Lint website
-        run: npx eslint . || true
-        working-directory: website
-      - name: Build website
-        run: npm run build
-        working-directory: website

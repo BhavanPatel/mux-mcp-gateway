@@ -59,7 +59,7 @@ Use `${VAR_NAME}` syntax in `command`, `args`, `env`, `headers`, and `url` field
 ```
 
 > [!WARNING]
-> If an env var is not set, it resolves to an empty string. Use `mux-cli health` to check for missing variables.
+> If an env var is not set, it resolves to an empty string. Use `mux health` to check for missing variables.
 
 ### Environment Variables
 

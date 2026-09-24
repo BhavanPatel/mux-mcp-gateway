@@ -6,7 +6,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

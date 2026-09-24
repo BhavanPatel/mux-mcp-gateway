@@ -21,7 +21,7 @@ export default function Install() {
           Get started in seconds.
         </h2>
         <p className="text-base mb-10" style={{ color: '#6b7394' }}>
-          One command installs globally. Then run <code className="font-mono" style={{ color: '#a78bfa' }}>mux-cli</code> from anywhere.
+          One command installs globally. Then run <code className="font-mono" style={{ color: '#a78bfa' }}>mux</code> from anywhere.
         </p>
 
         {/* Step 1 — Install */}
@@ -57,7 +57,7 @@ export default function Install() {
             <span className="text-sm font-medium" style={{ color: '#f0f4ff' }}>Run</span>
           </div>
           <div className="rounded-lg border px-4 py-3" style={{ borderColor: '#ffffff08', background: '#080c18' }}>
-            <code className="text-[13px] font-mono" style={{ color: '#e2e8f0' }}>mux-cli</code>
+            <code className="text-[13px] font-mono" style={{ color: '#e2e8f0' }}>mux</code>
           </div>
         </div>
 

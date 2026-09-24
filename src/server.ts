@@ -6,6 +6,7 @@ import { getToolsForServer, getCatalogStats } from './tool-catalog.js';
 import { findToolsAcrossServers, resolveServerByToolName } from './tool-discovery.js';
 import { getQuickStats, getInsights } from './metrics.js';
 import { logger } from './logger.js';
+import { VERSION } from './version.js';
 
 const startTime = Date.now();
 const MAX_KEYWORDS_IN_DESCRIPTION = 5;
@@ -15,7 +16,7 @@ const MS_PER_SECOND = 1000;
 export function createServer(): McpServer {
   const server = new McpServer({
     name: 'mux',
-    version: '0.1.0',
+    version: VERSION,
   });
 
   // Build dynamic description with registered server names + keywords for discoverability
@@ -170,7 +171,6 @@ export function createServer(): McpServer {
           trackingSince: quickStats.upSince,
           totalCalls: quickStats.totalCalls,
           contextReductionPct: `${quickStats.contextReductionPct}%`,
-          estimatedTokensSaved: quickStats.estimatedTokensSaved,
           topServer: quickStats.topServer,
           insights,
         },

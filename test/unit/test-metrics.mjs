@@ -4,13 +4,9 @@
  */
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { writeFileSync, mkdirSync, existsSync, rmSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '../..');
 const TEST_DIR = '/tmp/mux-metrics-test';
 const METRICS_PATH = resolve(TEST_DIR, 'metrics.json');
 
@@ -88,14 +84,34 @@ describe('metrics aggregation logic', () => {
     assert.equal(reduction, 78); // 1 - 4/18 = 0.777... -> 78%
   });
 
-  it('estimates tokens saved', () => {
-    const calls = testEvents.filter((e) => e.type === 'call');
-    const spawns = testEvents.filter((e) => e.type === 'spawn');
-    const totalTools = spawns.reduce((s, e) => s + e.toolCount, 0);
-    const muxTools = 4;
-    const tokensPerTool = 200;
-    const saved = calls.length * Math.max(0, totalTools - muxTools) * tokensPerTool;
-    assert.equal(saved, 8400); // 3 * 14 * 200
+  it('buckets calls into real per-day counts (getDailyActivity algorithm)', () => {
+    // Mirrors metrics.getDailyActivity / useMetrics: every bar is a measured
+    // count, no synthesis. (WS-C5 regression against buildDailyCounts weights.)
+    const days = 14;
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const events = [
+      { ts: todayStart + 3600_000, type: 'call' }, // today
+      { ts: todayStart + 7200_000, type: 'call' }, // today
+      { ts: todayStart - 86400_000 + 3600_000, type: 'call' }, // yesterday
+      { ts: todayStart - 5 * 86400_000, type: 'call' }, // 5 days ago
+      { ts: todayStart - 100 * 86400_000, type: 'call' }, // out of window
+      { ts: todayStart + 60_000, type: 'spawn' }, // not a call — ignored
+    ];
+    const counts = new Array(days).fill(0);
+    for (const e of events) {
+      if (e.type !== 'call') continue;
+      const dayStart = new Date(e.ts).setHours(0, 0, 0, 0);
+      const idx = days - 1 - Math.round((todayStart - dayStart) / 86400_000);
+      if (idx >= 0 && idx < days) counts[idx] += 1;
+    }
+    assert.equal(counts.length, days);
+    assert.equal(counts[days - 1], 2); // today
+    assert.equal(counts[days - 2], 1); // yesterday
+    assert.equal(counts[days - 6], 1); // 5 days ago
+    assert.equal(
+      counts.reduce((a, b) => a + b, 0),
+      4,
+    ); // out-of-window + spawn excluded
   });
 
   it('counts errors', () => {

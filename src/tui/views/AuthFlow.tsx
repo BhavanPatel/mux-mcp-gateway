@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useLayout } from '../hooks/useLayout.js';
 import { colors, symbols, box } from '../styles.js';
+import { SPINNER_FRAMES } from '../components/Spinner.js';
 
 export type AuthStatus = 'pending' | 'waiting' | 'success' | 'error';
 
@@ -20,8 +21,6 @@ interface AuthFlowProps {
   onBack: () => void;
   onRetry: (serverName: string) => void;
 }
-
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 export function AuthFlow({ servers, onBack, onRetry }: AuthFlowProps) {
   const { columns } = useLayout();

@@ -12,7 +12,6 @@ interface ActionMenuProps {
   needsAuthServers: string[];
   callsToday: number;
   savingsPct: number;
-  version: string;
   selectedIndex: number;
 }
 
@@ -21,7 +20,6 @@ export function ActionMenu({
   needsAuthServers,
   callsToday,
   savingsPct,
-  version,
   selectedIndex,
 }: ActionMenuProps) {
   const { layout, columns } = useLayout();
@@ -100,28 +98,6 @@ export function ActionMenu({
       <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
       <Text>
         {colors.brandMid(`  ${box.vertical}  `)}
-        {colors.textSecondary(`${symbols.system} System`)}
-        {' '.repeat(Math.max(0, boxWidth - 13))}
-        {colors.brandMid(box.vertical)}
-      </Text>
-      <MenuRow
-        label="Update"
-        desc={`v${version} (latest)`}
-        selected={idx++ === selectedIndex}
-        showDesc={showDesc}
-        boxWidth={boxWidth}
-      />
-      <MenuRow
-        label="Uninstall"
-        desc="Remove Mux completely"
-        selected={idx++ === selectedIndex}
-        showDesc={showDesc}
-        boxWidth={boxWidth}
-      />
-
-      <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
-      <Text>
-        {colors.brandMid(`  ${box.vertical}  `)}
         {colors.accentDim('↑↓ navigate │ enter select │ ? help │ q quit')}
         {' '.repeat(Math.max(0, boxWidth - 49))}
         {colors.brandMid(box.vertical)}
@@ -171,5 +147,8 @@ function MenuRow({
 }
 
 export function getMenuItemCount(needsAuthCount: number): number {
-  return (needsAuthCount > 0 ? 1 : 0) + 5 + 2;
+  // (optional attention row) + 5 action items (Test, Metrics, Add, Edit, Remove).
+  // The System section (Update/Uninstall) was removed — those flows are now
+  // CLI subcommands (mux update / mux uninstall).
+  return (needsAuthCount > 0 ? 1 : 0) + 5;
 }

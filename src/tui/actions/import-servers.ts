@@ -1,13 +1,19 @@
 /**
  * Import servers from an existing mcp.json file into the Mux registry.
  * Used by the Onboarding "Quick Setup" flow.
+ *
+ * All registry writes go through the guarded writer (config-writer.ts): a
+ * timestamped backup is taken before any mutation, writes are atomic + 0600,
+ * and a corrupt existing registry is NEVER silently reset to `{}` and
+ * overwritten — it fails closed with the backup preserved.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { mutateRegistry } from '../../config-writer.js';
+import { ConfigError, RegistryInput, ServerConfigInput } from '../../config-schema.js';
 
 const REGISTRY_PATH = resolve(homedir(), '.mux', 'servers.json');
-const MUX_DIR = resolve(homedir(), '.mux');
 
 interface McpServerConfig {
   command?: string;
@@ -52,10 +58,17 @@ export function findMcpJson(): string | null {
   return null;
 }
 
+function toServerEntry(config: McpServerConfig): ServerConfigInput {
+  const isHttp = !!config.url || config.transport === 'http';
+  return isHttp
+    ? { transport: 'http', url: config.url, headers: config.headers || {}, keywords: [] }
+    : { transport: 'stdio', command: config.command, args: config.args || [], env: config.env || {}, keywords: [] };
+}
+
 /**
  * Import servers from a given mcp.json path into the Mux registry.
  */
-export function importFromMcpJson(mcpJsonPath: string): ImportResult {
+export async function importFromMcpJson(mcpJsonPath: string): Promise<ImportResult> {
   if (!existsSync(mcpJsonPath)) {
     return { imported: [], skipped: [], error: `File not found: ${mcpJsonPath}` };
   }
@@ -72,65 +85,77 @@ export function importFromMcpJson(mcpJsonPath: string): ImportResult {
     return { imported: [], skipped: [], error: 'No mcpServers found in file' };
   }
 
-  // Load existing registry (or create)
-  if (!existsSync(MUX_DIR)) mkdirSync(MUX_DIR, { recursive: true });
-
-  let registry: { servers: Record<string, unknown> } = { servers: {} };
-  if (existsSync(REGISTRY_PATH)) {
-    try {
-      registry = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8'));
-    } catch {
-      registry = { servers: {} };
-    }
-  }
-
   const imported: string[] = [];
   const skipped: string[] = [];
 
-  for (const [name, config] of Object.entries(servers)) {
-    if (registry.servers[name]) {
-      skipped.push(name);
-      continue;
+  try {
+    const outcome = await mutateRegistry(REGISTRY_PATH, (current: RegistryInput) => {
+      for (const [name, config] of Object.entries(servers)) {
+        if (current.servers[name]) {
+          skipped.push(name);
+          continue;
+        }
+        current.servers[name] = toServerEntry(config);
+        imported.push(name);
+      }
+      return current;
+    });
+    if (!outcome.ok) {
+      return { imported: [], skipped: [], error: `Registry write failed: ${outcome.message}` };
     }
-
-    // Determine transport
-    const isHttp = !!config.url || config.transport === 'http';
-    const serverEntry = isHttp
-      ? { transport: 'http', url: config.url, headers: config.headers || {}, keywords: [] }
-      : { transport: 'stdio', command: config.command, args: config.args || [], env: config.env || {}, keywords: [] };
-
-    registry.servers[name] = serverEntry;
-    imported.push(name);
+  } catch (err: any) {
+    // Fail closed on a corrupt existing registry — the writer preserved a backup.
+    const msg = err instanceof ConfigError ? err.message : err?.message || 'unknown error';
+    return { imported: [], skipped: [], error: `Existing registry is invalid, refusing to overwrite: ${msg}` };
   }
-
-  writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf-8');
 
   return { imported, skipped };
 }
 
 /**
  * Add a single server to the registry.
+ *
+ * Ports the collection behaviour the old `add.sh` had (env vars, headers,
+ * discovery keywords) into the API surface: these are optional and default to
+ * empty when omitted. Keyword auto-generation is NOT done here — it requires
+ * tool metadata and runs post-discovery on first connection
+ * (see keyword-extractor.generateAndStoreKeywords).
+ *
+ * Fails closed on a name collision rather than silently overwriting an existing
+ * server (the bulk import path skips collisions; this single-add path used to
+ * clobber). Callers that intend to replace should remove first.
  */
-export function addServerToRegistry(
+export async function addServerToRegistry(
   name: string,
-  config: { transport: 'http' | 'stdio'; url?: string; command?: string; args?: string[] },
-): void {
-  if (!existsSync(MUX_DIR)) mkdirSync(MUX_DIR, { recursive: true });
-
-  let registry: { servers: Record<string, unknown> } = { servers: {} };
-  if (existsSync(REGISTRY_PATH)) {
-    try {
-      registry = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8'));
-    } catch {
-      registry = { servers: {} };
-    }
-  }
-
-  const entry =
+  config: {
+    transport: 'http' | 'stdio';
+    url?: string;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    headers?: Record<string, string>;
+    keywords?: string[];
+  },
+): Promise<void> {
+  const entry: ServerConfigInput =
     config.transport === 'http'
-      ? { transport: 'http', url: config.url, headers: {}, keywords: [] }
-      : { transport: 'stdio', command: config.command, args: config.args || [], env: {}, keywords: [] };
+      ? { transport: 'http', url: config.url, headers: config.headers || {}, keywords: config.keywords || [] }
+      : {
+          transport: 'stdio',
+          command: config.command,
+          args: config.args || [],
+          env: config.env || {},
+          keywords: config.keywords || [],
+        };
 
-  registry.servers[name] = entry;
-  writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf-8');
+  const outcome = await mutateRegistry(REGISTRY_PATH, (current: RegistryInput) => {
+    if (current.servers[name]) {
+      throw new ConfigError(`A server named "${name}" already exists. Remove it first or choose another name.`);
+    }
+    current.servers[name] = entry;
+    return current;
+  });
+  if (!outcome.ok) {
+    throw new Error(`Failed to add server "${name}": ${outcome.message}`);
+  }
 }

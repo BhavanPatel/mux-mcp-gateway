@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # Runtime + dev npm dependencies. Deps are pinned exactly (WS-D1), so Dependabot
+  # is the mechanism that surfaces upgrades rather than floating ranges.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    groups:
+      dev-dependencies:
+        dependency-type: development
+    labels:
+      - dependencies
+
+  # The docs site has its own lockfile.
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - website
+
+  # Keep the pinned GitHub Actions SHAs current; Dependabot bumps the SHA and
+  # updates the `# vX` comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - ci

@@ -1,7 +1,9 @@
-import { readFileSync, watchFile } from 'node:fs';
+import { readFileSync, existsSync, watchFile } from 'node:fs';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from './logger.js';
+import { parseRegistry, ConfigError } from './config-schema.js';
+import { mutateRegistry, NOT_FOUND } from './config-writer.js';
 
 export interface ServerConfig {
   transport: 'stdio' | 'http';
@@ -13,7 +15,7 @@ export interface ServerConfig {
   url?: string;
   headers?: Record<string, string>;
   // common
-  auth?: { type: 'oauth'; tokenEndpoint: string; clientId: string; scopes?: string[] };
+  auth?: { type: 'oauth'; clientId?: string; scopes?: string[] };
   keywords?: string[];
   idleTimeoutMs?: number;
 }
@@ -24,8 +26,18 @@ export interface Registry {
 
 const DEFAULT_REGISTRY_PATH = resolve(homedir(), '.mux', 'servers.json');
 
+/** Names of env vars referenced by the config that had no value. Reported, not silently empty. */
+const unresolvedEnvVars = new Set<string>();
+
 function interpolateEnv(value: string): string {
-  return value.replace(/\$\{([^}]+)\}/g, (_, key) => process.env[key] || '');
+  return value.replace(/\$\{([^}]+)\}/g, (_, key) => {
+    const resolved = process.env[key];
+    if (resolved === undefined || resolved === '') {
+      unresolvedEnvVars.add(key);
+      return '';
+    }
+    return resolved;
+  });
 }
 
 function interpolateConfig(config: ServerConfig): ServerConfig {
@@ -44,10 +56,10 @@ function interpolateConfig(config: ServerConfig): ServerConfig {
 
 function loadFromDisk(path: string): Registry {
   const raw = readFileSync(path, 'utf-8');
-  const parsed = JSON.parse(raw) as Registry;
+  const parsed = parseRegistry(raw); // validates + migrates; throws ConfigError on malformed
   const servers: Record<string, ServerConfig> = {};
   for (const [name, config] of Object.entries(parsed.servers)) {
-    servers[name] = interpolateConfig(config);
+    servers[name] = interpolateConfig(config as ServerConfig);
   }
   return { servers };
 }
@@ -202,12 +214,31 @@ export function resolveServerName(name: string): string | undefined {
 
 export function loadRegistry(path?: string): Registry {
   registryPath = path || process.env.MUX_REGISTRY_PATH || DEFAULT_REGISTRY_PATH;
+  unresolvedEnvVars.clear();
   try {
+    // A genuinely absent file is a legitimate empty registry (fresh install).
+    if (!existsSync(registryPath)) {
+      registry = { servers: {} };
+      logger.info('Registry file not present; starting with an empty registry', { path: registryPath });
+      return registry;
+    }
     registry = loadFromDisk(registryPath);
     logger.info(`Registry loaded: ${Object.keys(registry.servers).length} servers`, { path: registryPath });
+    if (unresolvedEnvVars.size > 0) {
+      logger.warn(
+        `Unresolved env vars in registry config: ${[...unresolvedEnvVars].join(', ')} (expanded to empty string)`,
+      );
+    }
   } catch (err: any) {
-    logger.error(`Failed to load registry: ${err.message}`, { path: registryPath });
-    registry = { servers: {} };
+    // Fail CLOSED: a malformed/corrupt config must not masquerade as an empty
+    // registry (which would silently report "success with zero servers"). Keep
+    // the last-good in-memory registry and rethrow so startup can surface it.
+    if (err instanceof ConfigError) {
+      logger.error(`Registry config invalid, refusing to load: ${err.message}`, { path: registryPath });
+    } else {
+      logger.error(`Failed to load registry: ${err.message}`, { path: registryPath });
+    }
+    throw err;
   }
   return registry;
 }
@@ -220,57 +251,55 @@ export function watchRegistry(onChange?: () => void) {
   });
 }
 
-import { writeFileSync } from 'node:fs';
-
 export function updateServerKeywords(name: string, keywords: string[]): void {
-  try {
-    const raw = readFileSync(registryPath, 'utf-8');
-    const parsed = JSON.parse(raw) as Registry;
-    if (parsed.servers[name]) {
-      // Only update if current keywords are empty or fewer
-      const existing = parsed.servers[name].keywords || [];
-      if (existing.length < keywords.length) {
-        parsed.servers[name].keywords = keywords;
-        writeFileSync(registryPath, JSON.stringify(parsed, null, 2), 'utf-8');
-        // Update in-memory registry too
-        if (registry.servers[name]) {
-          registry.servers[name].keywords = keywords;
-        }
-      }
+  // Only update if current keywords are empty or fewer (preserve richer sets).
+  const existing = registry.servers[name]?.keywords || [];
+  if (registry.servers[name] && existing.length >= keywords.length) return;
+
+  // In-memory first for responsiveness; persist via the guarded writer.
+  if (registry.servers[name]) registry.servers[name].keywords = keywords;
+  void mutateRegistry(registryPath, (current) => {
+    if (!current.servers[name]) return NOT_FOUND;
+    const cur = current.servers[name].keywords || [];
+    if (cur.length >= keywords.length) return NOT_FOUND;
+    current.servers[name].keywords = keywords;
+    return current;
+  }).then((r) => {
+    if (!r.ok && r.error === 'write-failed') {
+      logger.warn(`Failed to persist keywords for "${name}": ${r.message}`);
     }
-  } catch {
-    // Non-critical — don't fail on keyword update
-  }
+  });
 }
 
 /** Force-set keywords for a server (used by TUI edit view). */
 export function setServerKeywords(name: string, keywords: string[]): void {
-  try {
-    const raw = readFileSync(registryPath, 'utf-8');
-    const parsed = JSON.parse(raw) as Registry;
-    if (parsed.servers[name]) {
-      parsed.servers[name].keywords = keywords;
-      writeFileSync(registryPath, JSON.stringify(parsed, null, 2), 'utf-8');
-      if (registry.servers[name]) {
-        registry.servers[name].keywords = keywords;
-      }
+  if (registry.servers[name]) registry.servers[name].keywords = keywords;
+  void mutateRegistry(registryPath, (current) => {
+    if (!current.servers[name]) return NOT_FOUND;
+    current.servers[name].keywords = keywords;
+    return current;
+  }).then((r) => {
+    if (!r.ok && r.error === 'write-failed') {
+      logger.warn(`Failed to persist keywords for "${name}": ${r.message}`);
     }
-  } catch {
-    // Non-critical
-  }
+  });
 }
 
-/** Remove a server from the registry file. */
-export function removeServer(name: string): boolean {
-  try {
-    const raw = readFileSync(registryPath, 'utf-8');
-    const parsed = JSON.parse(raw) as Registry;
-    if (!parsed.servers[name]) return false;
-    delete parsed.servers[name];
-    writeFileSync(registryPath, JSON.stringify(parsed, null, 2), 'utf-8');
+export type RemoveServerResult = 'removed' | 'not-found' | 'write-failed';
+
+/**
+ * Remove a server from the registry file. Distinguishes "not found" from
+ * "write failed" (both previously returned false).
+ */
+export async function removeServer(name: string): Promise<RemoveServerResult> {
+  const outcome = await mutateRegistry(registryPath, (current) => {
+    if (!current.servers[name]) return NOT_FOUND;
+    delete current.servers[name];
+    return current;
+  });
+  if (outcome.ok) {
     delete registry.servers[name];
-    return true;
-  } catch {
-    return false;
+    return 'removed';
   }
+  return outcome.error === 'not-found' ? 'not-found' : 'write-failed';
 }

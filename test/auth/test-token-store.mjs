@@ -1,185 +1,110 @@
 /**
- * Unit tests for token store (read/write/delete/expiry logic).
- * Run: node --test test/test-token-store.mjs
+ * Group 13 — token store facade (src/auth/index.ts).
+ * Regression tests for the single token path, absolute-expiry storage, and the
+ * MUX_TOKEN_STORE_PATH split-brain. Runs against the compiled dist output.
+ *
+ * Run: node --test test/auth/test-token-store.mjs
  */
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
-const TEST_DIR = '/tmp/mux-token-store-test';
-const TOKENS_PATH = resolve(TEST_DIR, 'tokens.json');
+const TEST_DIR = '/tmp/mux-facade-token-test';
+const STORE_PATH = resolve(TEST_DIR, 'tokens.json');
+
+// Point every token operation at an isolated store before importing the module.
+process.env.MUX_TOKEN_STORE_PATH = STORE_PATH;
+
+const { saveToken, loadToken, readStoredToken, isTokenExpired, deleteToken, getTokenStorePath } = await import(
+  resolve(ROOT, 'dist/auth/index.js')
+);
 
 before(() => {
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
   mkdirSync(TEST_DIR, { recursive: true });
 });
-
-after(() => {
-  rmSync(TEST_DIR, { recursive: true, force: true });
+after(() => rmSync(TEST_DIR, { recursive: true, force: true }));
+beforeEach(() => {
+  if (existsSync(STORE_PATH)) rmSync(STORE_PATH);
 });
 
-// Helper functions that mirror token-store.ts logic
-function readStore() {
-  try {
-    return JSON.parse(readFileSync(TOKENS_PATH, 'utf-8'));
-  } catch {
-    return {};
-  }
-}
-
-function writeStore(store) {
-  writeFileSync(TOKENS_PATH, JSON.stringify(store, null, 2), 'utf-8');
-}
-
-function saveToken(serverName, token) {
-  const store = readStore();
-  store[serverName] = token;
-  writeStore(store);
-}
-
-function getToken(serverName) {
-  const store = readStore();
-  const entry = store[serverName];
-  if (!entry) return undefined;
-  if (entry.expiresAt && Date.now() > entry.expiresAt - 60_000) {
-    return { ...entry, accessToken: '' }; // expired
-  }
-  return entry;
-}
-
-function deleteToken(serverName) {
-  const store = readStore();
-  delete store[serverName];
-  writeStore(store);
-}
-
-describe('token store: basic operations', () => {
-  it('saves and retrieves a token', () => {
-    const token = { accessToken: 'abc123', refreshToken: 'ref456', expiresAt: Date.now() + 3600_000 };
-    saveToken('test-server', token);
-    const retrieved = getToken('test-server');
-    assert.equal(retrieved.accessToken, 'abc123');
-    assert.equal(retrieved.refreshToken, 'ref456');
+describe('facade token store: single path', () => {
+  it('honours MUX_TOKEN_STORE_PATH', () => {
+    assert.equal(getTokenStorePath(), STORE_PATH);
   });
 
-  it('returns undefined for nonexistent server', () => {
-    assert.equal(getToken('nonexistent'), undefined);
+  it('a token written by one call is read back by another (one store)', () => {
+    saveToken('srv', { access_token: 'tok', token_type: 'Bearer', expires_in: 3600 });
+    const loaded = loadToken('srv');
+    assert.equal(loaded.access_token, 'tok');
+    assert.equal(loaded.token_type, 'Bearer');
   });
 
   it('deletes a token', () => {
-    saveToken('to-delete', { accessToken: 'x', expiresAt: Date.now() + 3600_000 });
-    assert.ok(getToken('to-delete'));
-    deleteToken('to-delete');
-    assert.equal(getToken('to-delete'), undefined);
-  });
-
-  it('stores multiple servers independently', () => {
-    saveToken('server-a', { accessToken: 'aaa', expiresAt: Date.now() + 3600_000 });
-    saveToken('server-b', { accessToken: 'bbb', expiresAt: Date.now() + 3600_000 });
-    assert.equal(getToken('server-a').accessToken, 'aaa');
-    assert.equal(getToken('server-b').accessToken, 'bbb');
-  });
-
-  it('overwrites existing token on re-save', () => {
-    saveToken('overwrite-test', { accessToken: 'old', expiresAt: Date.now() + 3600_000 });
-    saveToken('overwrite-test', { accessToken: 'new', expiresAt: Date.now() + 3600_000 });
-    assert.equal(getToken('overwrite-test').accessToken, 'new');
+    saveToken('gone', { access_token: 'x', expires_in: 3600 });
+    assert.ok(loadToken('gone'));
+    deleteToken('gone');
+    assert.equal(loadToken('gone'), undefined);
   });
 });
 
-describe('token store: expiry logic', () => {
-  it('returns token with empty accessToken when expired', () => {
-    saveToken('expired', { accessToken: 'tok', expiresAt: Date.now() - 1000 });
-    const result = getToken('expired');
-    assert.equal(result.accessToken, '');
+describe('facade token store: absolute expiry', () => {
+  it('converts relative expires_in to an absolute deadline on save', () => {
+    const before = Date.now();
+    saveToken('exp', { access_token: 'tok', expires_in: 3600 });
+    const entry = readStoredToken('exp');
+    assert.ok(entry.expiresAt >= before + 3600_000 - 2000);
+    assert.ok(entry.expiresAt <= Date.now() + 3600_000 + 2000);
   });
 
-  it('returns token with empty accessToken when expiring within 60s buffer', () => {
-    saveToken('almost-expired', { accessToken: 'tok', expiresAt: Date.now() + 30_000 }); // 30s from now
-    const result = getToken('almost-expired');
-    assert.equal(result.accessToken, ''); // within 60s buffer
+  it('isTokenExpired treats a past deadline as expired (not perpetually fresh)', () => {
+    assert.equal(isTokenExpired({ accessToken: 'tok', expiresAt: Date.now() - 1000 }), true);
   });
 
-  it('returns valid token when not yet in buffer zone', () => {
-    saveToken('valid', { accessToken: 'tok', expiresAt: Date.now() + 120_000 }); // 2min from now
-    const result = getToken('valid');
-    assert.equal(result.accessToken, 'tok');
+  it('isTokenExpired respects the 60s buffer', () => {
+    assert.equal(isTokenExpired({ accessToken: 't', expiresAt: Date.now() + 30_000 }), true); // within buffer
+    assert.equal(isTokenExpired({ accessToken: 't', expiresAt: Date.now() + 120_000 }), false);
   });
 
-  it('returns token without expiry check when expiresAt is absent', () => {
-    saveToken('no-expiry', { accessToken: 'permanent' });
-    const result = getToken('no-expiry');
-    assert.equal(result.accessToken, 'permanent');
-  });
-});
-
-describe('token store: file format', () => {
-  it('writes valid JSON', () => {
-    saveToken('json-test', { accessToken: 'x' });
-    const raw = readFileSync(TOKENS_PATH, 'utf-8');
-    const parsed = JSON.parse(raw); // should not throw
-    assert.ok(parsed['json-test']);
+  it('loadToken re-derives a relative expires_in from the absolute deadline', () => {
+    saveToken('rel', { access_token: 'tok', expires_in: 3600 });
+    const loaded = loadToken('rel');
+    assert.ok(loaded.expires_in <= 3600 && loaded.expires_in > 3500);
   });
 
-  it('preserves all token fields', () => {
-    const token = {
-      accessToken: 'access',
-      refreshToken: 'refresh',
-      expiresAt: 1700000000000,
-      scopes: ['read', 'write'],
-    };
-    saveToken('fields-test', token);
-    const retrieved = readStore()['fields-test'];
-    assert.equal(retrieved.accessToken, 'access');
-    assert.equal(retrieved.refreshToken, 'refresh');
-    assert.equal(retrieved.expiresAt, 1700000000000);
-    assert.deepEqual(retrieved.scopes, ['read', 'write']);
-  });
-
-  it('handles empty store gracefully', () => {
-    writeFileSync(TOKENS_PATH, '{}');
-    assert.equal(getToken('anything'), undefined);
-  });
-
-  it('handles corrupted file gracefully', () => {
-    writeFileSync(TOKENS_PATH, 'not json at all');
-    // readStore should return {} on parse error
-    const store = readStore();
-    assert.deepEqual(store, {});
+  it('preserves an existing refresh token when the provider omits it', () => {
+    saveToken('ref', { access_token: 'a1', refresh_token: 'r1', expires_in: 3600 });
+    saveToken('ref', { access_token: 'a2', expires_in: 3600 }); // no refresh_token
+    assert.equal(readStoredToken('ref').refreshToken, 'r1');
   });
 });
 
-describe('token store: concurrent-safe writes', () => {
-  it('multiple rapid saves dont corrupt the file', () => {
-    for (let i = 0; i < 20; i++) {
-      saveToken(`rapid-${i}`, { accessToken: `tok-${i}`, expiresAt: Date.now() + 3600_000 });
+describe('facade token store: two servers, no cross-talk', () => {
+  it('writing server B does not affect server A', () => {
+    saveToken('A', { access_token: 'aaa', expires_in: 3600 });
+    saveToken('B', { access_token: 'bbb', expires_in: 3600 });
+    assert.equal(loadToken('A').access_token, 'aaa');
+    assert.equal(loadToken('B').access_token, 'bbb');
+  });
+});
+
+describe('facade token store: atomic writes', () => {
+  it('leaves no .tmp file behind after a normal write', () => {
+    saveToken('atomic', { access_token: 'x', expires_in: 3600 });
+    const leftovers = readdirSync(TEST_DIR).filter((f) => f.endsWith('.tmp'));
+    assert.deepEqual(leftovers, []);
+  });
+
+  it('rapid sequential saves keep the store parseable and complete', () => {
+    for (let i = 0; i < 25; i++) {
+      saveToken(`rapid-${i}`, { access_token: `tok-${i}`, expires_in: 3600 });
     }
-    const store = readStore();
-    assert.equal(Object.keys(store).filter((k) => k.startsWith('rapid-')).length, 20);
-  });
-});
-
-describe('token store: MCP OAuth provider compatibility', () => {
-  it('handles access_token field (snake_case from OAuth)', () => {
-    // The MCP OAuth provider uses access_token (snake_case) per OAuth spec
-    const store = readStore();
-    store['oauth-server'] = { access_token: 'bearer_tok', token_type: 'Bearer', expires_in: 3600 };
-    writeStore(store);
-
-    const raw = readStore();
-    assert.equal(raw['oauth-server'].access_token, 'bearer_tok');
-  });
-
-  it('handles accessToken field (camelCase from token-store)', () => {
-    const store = readStore();
-    store['camel-server'] = { accessToken: 'camel_tok', refreshToken: 'ref' };
-    writeStore(store);
-
-    const raw = readStore();
-    assert.equal(raw['camel-server'].accessToken, 'camel_tok');
+    for (let i = 0; i < 25; i++) {
+      assert.equal(loadToken(`rapid-${i}`).access_token, `tok-${i}`);
+    }
   });
 });

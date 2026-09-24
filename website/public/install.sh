@@ -34,15 +34,15 @@ fi
 
 echo "  ✓ npm $(npm -v)"
 echo ""
-echo "  Installing mux-cli..."
+echo "  Installing mux..."
 echo ""
 
 npm install -g "$PACKAGE" 2>&1 | sed 's/^/  /'
 
 echo ""
-echo "  ✓ mux-cli installed!"
+echo "  ✓ mux installed!"
 echo ""
 echo "  Get started:"
-echo "    mux-cli          # Setup wizard"
-echo "    mux-cli --help   # All commands"
+echo "    mux            # Interactive TUI dashboard"
+echo "    mux --help     # All commands"
 echo ""

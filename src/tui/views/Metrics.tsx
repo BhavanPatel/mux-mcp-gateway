@@ -2,7 +2,7 @@
  * Metrics view — scrollable metrics dashboard.
  * Shows activity chart, context savings, resource savings, and top servers.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useLayout } from '../hooks/useLayout.js';
 import { ActivityChart } from '../components/ActivityChart.js';
@@ -17,20 +17,13 @@ interface MetricsProps {
 }
 
 export function Metrics({ metrics, serverCount, onBack }: MetricsProps) {
-  const { columns } = useLayout();
+  const { columns, rows } = useLayout();
   const boxWidth = Math.min(columns - 4, 68);
-  const [, setScrollOffset] = useState(0);
 
   useInput((input, key) => {
     if (key.escape || input === 'q') {
       onBack();
       return;
-    }
-    if (key.upArrow) {
-      setScrollOffset((prev) => Math.max(0, prev - 1));
-    }
-    if (key.downArrow) {
-      setScrollOffset((prev) => prev + 1);
     }
   });
 
@@ -38,11 +31,14 @@ export function Metrics({ metrics, serverCount, onBack }: MetricsProps) {
   const toolsWithMux = Math.min(4, serverCount);
   const savingsPct = serverCount > 0 ? Math.round(((serverCount - toolsWithMux) / serverCount) * 100) : 0;
 
-  // Build daily counts from metrics (simplified: use callsToday for today, estimate rest)
-  const dailyCounts = buildDailyCounts(metrics);
+  // Real per-day counts for the activity chart (WS-C5): every bar is measured.
+  const dailyCounts = metrics.dailyActivity;
 
-  // Top servers for bar chart
-  const topEntries = metrics.topServers.map((s) => ({
+  // Top servers for bar chart. Bound the row count to the terminal height so
+  // the view never overflows a short window (WS-B3). ~14 rows are taken by the
+  // fixed header/summary/daily-chart/footer; the rest is available for servers.
+  const maxServerRows = Math.max(1, rows - 14);
+  const topEntries = metrics.topServers.slice(0, maxServerRows).map((s) => ({
     label: s.name,
     value: s.calls,
     suffix: `${s.calls} calls (${metrics.totalCalls > 0 ? Math.round((s.calls / metrics.totalCalls) * 100) : 0}%)`,
@@ -125,18 +121,12 @@ export function Metrics({ metrics, serverCount, onBack }: MetricsProps) {
 
       <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
 
-      {/* Resource Savings */}
+      {/* Resource Savings — structural only (no fabricated MB / re-auth counts) */}
       <Text>
         {colors.brandMid(`  ${box.vertical}  `)}
-        {colors.textSecondary('RAM:  ')}
-        {colors.textBold(`${serverCount * 50}MB \u2192 50MB`)}
-        {colors.textDim(' | ')}
-        {colors.textSecondary('Procs: ')}
-        {colors.textBold(`${serverCount}\u21921`)}
-        {colors.textDim(' | ')}
-        {colors.textSecondary('Re-auths saved: ')}
-        {colors.textBold(`${Math.round(metrics.totalCalls * 0.03)}`)}
-        {' '.repeat(Math.max(1, boxWidth - 55))}
+        {colors.textSecondary('Processes: ')}
+        {colors.textBold(`${serverCount} server${serverCount === 1 ? '' : 's'} \u2192 1 gateway`)}
+        {' '.repeat(Math.max(1, boxWidth - 40))}
         {colors.brandMid(box.vertical)}
       </Text>
 
@@ -162,7 +152,7 @@ export function Metrics({ metrics, serverCount, onBack }: MetricsProps) {
       </Text>
       <Text>
         {colors.brandMid(`  ${box.vertical}  `)}
-        {colors.textPrimary('Yesterday'.padEnd(14))}
+        {colors.textPrimary('Today'.padEnd(14))}
         {colors.textBold(String(metrics.callsToday).padEnd(10))}
         {colors.textPrimary(`${metrics.avgLatencyMs}ms`)}
         {' '.repeat(Math.max(1, boxWidth - 36))}
@@ -171,7 +161,7 @@ export function Metrics({ metrics, serverCount, onBack }: MetricsProps) {
       <Text>
         {colors.brandMid(`  ${box.vertical}  `)}
         {colors.textPrimary('Last 7d'.padEnd(14))}
-        {colors.textBold(String(Math.round(metrics.totalCalls * 0.5)).padEnd(10))}
+        {colors.textBold(String(metrics.callsLast7d).padEnd(10))}
         {colors.textPrimary(`${metrics.avgLatencyMs}ms`)}
         {' '.repeat(Math.max(1, boxWidth - 36))}
         {colors.brandMid(box.vertical)}
@@ -204,38 +194,12 @@ export function Metrics({ metrics, serverCount, onBack }: MetricsProps) {
 
       <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
       <Text>
-        {colors.brandMid(`  ${box.vertical}`)}
-        {' '.repeat(Math.max(1, boxWidth - 7))}
-        {colors.textDim('\u25BC more')} {colors.brandMid(box.vertical)}
-      </Text>
-      <Text>
         {colors.brandMid(`  ${box.vertical}  `)}
-        {colors.accentDim('\u2191\u2193 scroll | esc back | q quit')}
-        {' '.repeat(Math.max(1, boxWidth - 33))}
+        {colors.accentDim('esc back | q quit')}
+        {' '.repeat(Math.max(1, boxWidth - 21))}
         {colors.brandMid(box.vertical)}
       </Text>
       <Text>{colors.brandMid(`  ${box.bottomLeft}${'─'.repeat(boxWidth)}${box.bottomRight}`)}</Text>
     </Box>
   );
-}
-
-/**
- * Build approximate daily counts from metrics data.
- * Distributes totalCalls across 14 days using a deterministic pattern
- * (weighted toward recent days) instead of random values.
- */
-function buildDailyCounts(metrics: MetricsData): number[] {
-  const days = 14;
-  if (metrics.totalCalls === 0) return new Array(days).fill(0);
-
-  // Weighted distribution: more recent days get more calls
-  const weights = [0.5, 0.6, 0.7, 0.7, 0.8, 0.8, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1, 1.2, 1.3];
-  const totalWeight = weights.reduce((a, b) => a + b, 0);
-
-  const counts = weights.map((w) => Math.round((w / totalWeight) * metrics.totalCalls));
-
-  // Ensure last day matches callsToday
-  counts[days - 1] = metrics.callsToday;
-
-  return counts;
 }

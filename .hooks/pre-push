@@ -10,35 +10,41 @@ echo "  [pre-push] Running prechecks before push..."
 echo ""
 
 # Build
-echo "  [1/5] Building..."
-npm run build > /dev/null 2>&1
-echo "        ✔ Build passed"
-
-# Lint
-echo "  [2/5] Linting..."
-LINT_RESULT=$(npx eslint src/ 2>&1)
-LINT_EXIT=$?
-# Fail only on actual errors, not warnings
-if echo "$LINT_RESULT" | grep -qE "^\s+\d+:\d+\s+error"; then
-  echo "        ✖ Lint errors found. Fix before pushing."
-  echo "$LINT_RESULT" | grep -E "error" | head -5
+echo "  [1/4] Building..."
+if ! BUILD_OUT=$(npm run build 2>&1); then
+  echo "        ✖ Build failed:"
+  echo "$BUILD_OUT" | tail -20
   exit 1
 fi
-echo "        ✔ Lint passed (warnings only)"
+echo "        ✔ Build passed"
 
-# Format
-echo "  [3/5] Auto-formatting..."
-npm run format > /dev/null 2>&1
-# Check if formatting changed anything (shouldn't if pre-commit ran)
-if [[ -n "$(git status --porcelain)" ]]; then
-  echo "        ⚠ Files were reformatted. Staging changes..."
-  git add -u
+# Lint — eslint's own exit code decides pass/fail (0 = clean incl. under
+# --max-warnings default). Do NOT scrape output with a regex: the old BRE `\d`
+# was unsupported and `LINT_EXIT=$?` captured the assignment, not eslint, so this
+# step always reported "Lint passed". Show output on failure instead of hiding it.
+echo "  [2/4] Linting..."
+if ! npm run lint; then
+  echo "        ✖ Lint failed. Fix before pushing."
+  exit 1
+fi
+echo "        ✔ Lint passed"
+
+# Format check — verify only; never mutate the working tree or stage files
+# mid-push. If formatting is off, fail and let the developer run `npm run format`.
+echo "  [3/4] Checking formatting..."
+if ! npm run format:check; then
+  echo "        ✖ Formatting issues. Run 'npm run format' and re-commit."
+  exit 1
 fi
 echo "        ✔ Formatting OK"
 
-# Tests (unit + e2e)
-echo "  [4/5] Running tests..."
-npm run test:ci > /dev/null 2>&1
+# Tests (unit + e2e) — same single path as CI (test:ci). Surface failures.
+echo "  [4/4] Running tests..."
+if ! TEST_OUT=$(npm run test:ci 2>&1); then
+  echo "        ✖ Tests failed:"
+  echo "$TEST_OUT" | tail -30
+  exit 1
+fi
 echo "        ✔ Tests passed"
 
 echo ""

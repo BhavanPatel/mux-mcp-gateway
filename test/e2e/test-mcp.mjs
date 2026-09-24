@@ -19,7 +19,6 @@ mkdirSync(TEST_DIR, { recursive: true });
 
 const REGISTRY = resolve(TEST_DIR, 'servers.json');
 const TOKENS = resolve(TEST_DIR, 'tokens.json');
-const CATALOG = resolve(TEST_DIR, 'tool-catalog.json');
 
 writeFileSync(TOKENS, '{}');
 writeFileSync(
@@ -226,7 +225,9 @@ try {
 } finally {
   try {
     await transport.close();
-  } catch {}
+  } catch {
+    /* best-effort cleanup */
+  }
 }
 
 // ====== REPORT ======

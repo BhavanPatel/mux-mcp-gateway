@@ -67,7 +67,7 @@
 
 ### Auto-Approve Hooks
 
-`mux-cli setup` automatically installs client-specific auto-approve mechanisms:
+The `mux` TUI dashboard automatically installs client-specific auto-approve mechanisms:
 
 | Client | Mechanism | Location |
 |--------|-----------|----------|
@@ -76,4 +76,4 @@
 | Claude Desktop | No action needed (trusts configured servers) | — |
 
 > [!TIP]
-> These are non-destructive — setup won't overwrite existing hook/rule files. Run `mux-cli uninstall` to remove them.
+> These are non-destructive — onboarding won't overwrite existing hook/rule files. Run `mux uninstall` to remove them.

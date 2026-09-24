@@ -75,7 +75,7 @@ Mux now detects externally-completed authorization immediately:
 - **Instant resolution** — As soon as auth completes (via callback OR token detection), the timer clears and connection proceeds.
 
 > [!TIP]
-> Pre-authorize all HTTP servers after setup: `mux-cli auth --all`
+> Pre-authorize an HTTP server: `mux auth <server-name>`
 
 ### Token Persistence
 

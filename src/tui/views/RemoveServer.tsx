@@ -7,13 +7,14 @@ import { Box, Text, useInput } from 'ink';
 import { useLayout } from '../hooks/useLayout.js';
 import { colors, symbols, box } from '../styles.js';
 import type { TuiServerInfo } from '../hooks/useRegistry.js';
+import type { RemoveServerResult } from '../../registry.js';
 
 type RemovePhase = 'select' | 'confirm' | 'done';
 
 interface RemoveServerProps {
   servers: TuiServerInfo[];
   onBack: () => void;
-  onRemove: (serverName: string) => void;
+  onRemove: (serverName: string) => Promise<RemoveServerResult>;
 }
 
 export function RemoveServer({ servers, onBack, onRemove }: RemoveServerProps) {
@@ -23,6 +24,7 @@ export function RemoveServer({ servers, onBack, onRemove }: RemoveServerProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [confirmIndex, setConfirmIndex] = useState(0);
   const [removedName, setRemovedName] = useState('');
+  const [result, setResult] = useState<RemoveServerResult | null>(null);
 
   const selectedServer = servers[selectedIndex];
 
@@ -57,8 +59,11 @@ export function RemoveServer({ servers, onBack, onRemove }: RemoveServerProps) {
       if (key.return) {
         if (confirmIndex === 0) {
           setRemovedName(selectedServer.name);
-          onRemove(selectedServer.name);
+          setResult(null);
           setPhase('done');
+          void onRemove(selectedServer.name)
+            .then((r) => setResult(r))
+            .catch(() => setResult('write-failed'));
         } else {
           setPhase('select');
         }
@@ -223,10 +228,24 @@ export function RemoveServer({ servers, onBack, onRemove }: RemoveServerProps) {
         <>
           <Text>
             {colors.brandMid(`  ${box.vertical}  `)}
-            {colors.success(`${symbols.success} Server "${removedName}" removed`)}
+            {result === null
+              ? colors.textSecondary(`${symbols.pending} Removing "${removedName}"...`)
+              : result === 'removed'
+                ? colors.success(`${symbols.success} Server "${removedName}" removed`)
+                : result === 'not-found'
+                  ? colors.warning(`${symbols.error} "${removedName}" was not found`)
+                  : colors.error(`${symbols.error} Failed to remove "${removedName}" (write error)`)}
             {' '.repeat(Math.max(1, boxWidth - 22 - removedName.length))}
             {colors.brandMid(box.vertical)}
           </Text>
+          {result === 'write-failed' && (
+            <Text>
+              {colors.brandMid(`  ${box.vertical}  `)}
+              {colors.textDim('The registry file could not be written. A backup was left intact.')}
+              {' '.repeat(Math.max(1, boxWidth - 66))}
+              {colors.brandMid(box.vertical)}
+            </Text>
+          )}
           <Text>{colors.brandMid(`  ${box.vertical}${' '.repeat(boxWidth)}${box.vertical}`)}</Text>
           <Text>
             {colors.brandMid(`  ${box.vertical}  `)}

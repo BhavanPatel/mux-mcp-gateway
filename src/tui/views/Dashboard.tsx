@@ -3,13 +3,15 @@
  * Composes Banner + ServerList + ActionMenu with real data.
  */
 import React from 'react';
-import { Box } from 'ink';
+import { Box, Text } from 'ink';
 import { Banner } from '../components/Banner.js';
 import { ServerList } from '../components/ServerList.js';
 import { ActionMenu } from '../components/ActionMenu.js';
+import { colors, symbols } from '../styles.js';
 import type { RegistryData } from '../hooks/useRegistry.js';
 import type { MetricsData } from '../hooks/useMetrics.js';
 import type { PoolStatus } from '../hooks/usePool.js';
+import type { ImportResult } from '../actions/import-servers.js';
 
 interface DashboardProps {
   registry: RegistryData;
@@ -18,9 +20,10 @@ interface DashboardProps {
   uptime: string;
   selectedIndex: number;
   pool: PoolStatus;
+  importResult?: ImportResult | null;
 }
 
-export function Dashboard({ registry, metrics, version, uptime, selectedIndex, pool }: DashboardProps) {
+export function Dashboard({ registry, metrics, version, uptime, selectedIndex, pool, importResult }: DashboardProps) {
   const totalTools = registry.servers.reduce((sum, s) => sum + (s.toolCount || 0), 0);
   const needsAuthServers = registry.servers.filter((s) => s.status === 'needs-auth').map((s) => s.name);
 
@@ -37,6 +40,20 @@ export function Dashboard({ registry, metrics, version, uptime, selectedIndex, p
 
   return (
     <Box flexDirection="column" gap={1}>
+      {importResult && (
+        <Box flexDirection="column">
+          {importResult.error ? (
+            <Text>{colors.error(`${symbols.error} Import failed: ${importResult.error}`)}</Text>
+          ) : (
+            <Text>
+              {colors.success(`${symbols.success} Imported ${importResult.imported.length}`)}
+              {importResult.skipped.length > 0
+                ? colors.textDim(` · skipped ${importResult.skipped.length} (already registered)`)
+                : ''}
+            </Text>
+          )}
+        </Box>
+      )}
       <Banner
         version={version}
         uptime={uptime}
@@ -57,7 +74,6 @@ export function Dashboard({ registry, metrics, version, uptime, selectedIndex, p
         needsAuthServers={needsAuthServers}
         callsToday={metrics.callsToday}
         savingsPct={89}
-        version={version}
         selectedIndex={selectedIndex}
       />
     </Box>

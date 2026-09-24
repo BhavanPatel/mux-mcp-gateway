@@ -7,13 +7,14 @@ import { Box, Text, useInput } from 'ink';
 import { useLayout } from '../hooks/useLayout.js';
 import { colors, symbols, box } from '../styles.js';
 import type { TuiServerInfo } from '../hooks/useRegistry.js';
+import type { RemoveServerResult } from '../../registry.js';
 
 interface EditServerProps {
   server: TuiServerInfo;
   onBack: () => void;
   onAuth: (serverName: string) => void;
   onSaveTags: (serverName: string, tags: string[]) => void;
-  onDelete: (serverName: string) => void;
+  onDelete: (serverName: string) => Promise<RemoveServerResult>;
   onTest?: (serverName: string) => void;
 }
 
@@ -25,6 +26,7 @@ export function EditServer({ server, onBack, onAuth, onSaveTags, onDelete, onTes
   const [mode, setMode] = useState<EditMode>('view');
   const [tagInput, setTagInput] = useState(server.keywords.join(', '));
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<RemoveServerResult | null>(null);
 
   useInput((input, key) => {
     if (mode === 'editing-tags') {
@@ -54,7 +56,19 @@ export function EditServer({ server, onBack, onAuth, onSaveTags, onDelete, onTes
 
     if (confirmDelete) {
       if (input === 'y' || input === 'Y') {
-        onDelete(server.name);
+        void onDelete(server.name)
+          .then((result) => {
+            if (result === 'removed') {
+              onBack();
+            } else {
+              setConfirmDelete(false);
+              setDeleteError(result);
+            }
+          })
+          .catch(() => {
+            setConfirmDelete(false);
+            setDeleteError('write-failed');
+          });
         return;
       }
       setConfirmDelete(false);
@@ -180,6 +194,15 @@ export function EditServer({ server, onBack, onAuth, onSaveTags, onDelete, onTes
           {colors.brandMid(`  ${box.vertical}  `)}
           {colors.error(`Remove "${server.name}"? [y]es / any key to cancel`)}
           {' '.repeat(Math.max(1, boxWidth - server.name.length - 42))}
+          {colors.brandMid(box.vertical)}
+        </Text>
+      ) : deleteError ? (
+        <Text>
+          {colors.brandMid(`  ${box.vertical}  `)}
+          {deleteError === 'not-found'
+            ? colors.warning(`${symbols.error} "${server.name}" was not found`)
+            : colors.error(`${symbols.error} Failed to remove "${server.name}" (write error)`)}
+          {' '.repeat(Math.max(1, boxWidth - server.name.length - 34))}
           {colors.brandMid(box.vertical)}
         </Text>
       ) : (

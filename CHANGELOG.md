@@ -1,5 +1,80 @@
 # Changelog
 
+All notable changes to Mux are documented here. This project follows
+[Semantic Versioning](https://semver.org). Versions are cut by hand (see
+CONTRIBUTING.md) — the changelog is written, not generated.
+
+## [2.0.0] — 2026-09-24
+
+A single breaking release covering the CLI redesign, a rewritten auth path,
+and an operational + release-engineering envelope.
+
+### ⚠️ Breaking changes — migration required
+
+- **The binary is now `mux`, not `mux-cli`.** The `mux.sh` shim and the
+  `mux-cli` bin were removed. Update any scripts, aliases, and client configs to
+  call `mux`. In your MCP client, the gateway command becomes `mux serve` (or
+  just `mux` — a non-TTY invocation runs the gateway on stdio automatically).
+- **`mux auth --all` was removed.** Authorize one server at a time:
+  `mux auth <name>`.
+- **`mux add` no longer takes a raw JSON blob.** Use explicit flags:
+  `mux add <name> --transport http --url <url>` or
+  `mux add <name> --transport stdio --command <cmd> --args ... --env KEY=VALUE`.
+- **`list`, `status`, `setup`, and `keywords` commands were removed.** Running
+  `mux` in a terminal opens the interactive dashboard (which lists servers and
+  shows status); onboarding happens there. Discovery tags are edited with
+  `mux edit <name> --keyword ...`.
+- **The `post-commit` auto-version hook was removed.** Versions and the
+  changelog are now maintained by hand; releases are tagged deliberately.
+
+### Added
+
+- **Interactive TUI**: running `mux` in a TTY launches a dashboard (server list,
+  health, metrics, help); `mux serve` / non-TTY runs the headless gateway.
+- **New subcommands**: `mux doctor` (diagnose install, per-server reachability,
+  token/permission checks), `mux logs` (`--lines`, `--since`, `--follow`),
+  `mux report-bug` (redacted diagnostic bundle), `mux edit`, `mux config restore`,
+  `mux completion` (bash/zsh/fish).
+- **Global flags** across all commands: `--json` (machine-readable output),
+  `--plain` (ASCII-only), `--no-color`, `--yes`, `--dry-run`.
+- **Structured file logging**, on by default, NDJSON to `~/.mux/mux.log`, rotated
+  at 5 MB, with secret redaction (opt out via `MUX_LOG_TO_FILE=false`).
+- **Crash handling**: uncaught errors write a redacted crash report to
+  `~/.mux/crashes/`; `mux report-bug` bundles it into a prefilled issue.
+- **Single-sourced version**: `--version`, the TUI header, and the MCP handshake
+  all read the version from `package.json` (`src/version.ts`).
+- Project docs and governance: `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`,
+  `CODEOWNERS`, and a `TELEMETRY.md` policy.
+
+### Changed
+
+- **One OAuth implementation** — the duplicate `oauth.ts` was removed; no
+  unbounded awaits remain in the auth/connect path.
+- **Telemetry is local-only**, never transmitted; opt out with `MUX_NO_TELEMETRY`
+  or `DO_NOT_TRACK`. `metrics.json` is written `0600`.
+- **CI now actually gates**: `tsc --noEmit` typecheck, `eslint` over `src` **and**
+  `test`, `npm audit`, and a Node 20 + 22 × Ubuntu + macOS matrix. Actions are
+  pinned to commit SHAs; the publish workflow verifies the tag matches
+  `package.json`. `npm run test:ci` is the single verification path shared by
+  hooks, CI, and publish.
+
+### Removed
+
+- Fabricated metrics: the `estimatedTokensSaved` figure (and its ~4.8M sample)
+  was removed from the product and the docs — no displayed number is invented.
+- Dead code: `src/setup.ts` stub, duplicate 401 detection, unused transport
+  disconnect exports, and dead Metrics scroll state.
+
+### Security
+
+- Secret redaction across logs, crash reports, and telemetry (by key name and by
+  value shape), verified by tests. `~/.mux` is created `0700`, sensitive files
+  `0600`.
+- Known advisory: the pinned `@modelcontextprotocol/sdk@1.12.1` carries
+  high-severity advisories fixed in 1.30.x; that upgrade changes transport
+  behaviour and is tracked as a follow-up. CI currently gates `npm audit` at the
+  `critical` level and reports `high`.
+
 ## [1.10.0] — 2026-08-03
 
 ### Added

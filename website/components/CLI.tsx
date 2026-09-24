@@ -4,17 +4,18 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 
 const commands = [
-  { cmd: "mux-cli setup", desc: "Import from existing mcp.json" },
-  { cmd: "mux-cli add <name>", desc: "Add a new MCP server" },
-  { cmd: "mux-cli remove <name>", desc: "Remove a server" },
-  { cmd: "mux-cli auth [--all]", desc: "Authorize HTTP servers (browser)" },
-  { cmd: "mux-cli health", desc: "Run health check on all servers" },
-  { cmd: "mux-cli list", desc: "Show registered servers + status" },
-  { cmd: "mux-cli status", desc: "Show Mux process info" },
-  { cmd: "mux-cli metrics", desc: "Usage stats + insights dashboard" },
-  { cmd: "mux-cli keywords [name]", desc: "View/edit server keywords" },
-  { cmd: "mux-cli uninstall", desc: "Remove Mux completely" },
-  { cmd: "mux-cli update", desc: "Pull latest + rebuild" },
+  { cmd: "mux", desc: "Launch interactive TUI dashboard" },
+  { cmd: "mux serve", desc: "Run MCP gateway on stdio" },
+  { cmd: "mux add <name> --transport <http|stdio>", desc: "Add a new MCP server" },
+  { cmd: "mux remove <name>", desc: "Remove a server" },
+  { cmd: "mux edit <name>", desc: "Edit a server's keywords" },
+  { cmd: "mux auth <name>", desc: "Authorize an HTTP server (browser)" },
+  { cmd: "mux health [name]", desc: "Run health check on servers" },
+  { cmd: "mux metrics", desc: "Usage stats + insights dashboard" },
+  { cmd: "mux doctor", desc: "Diagnose common issues" },
+  { cmd: "mux logs", desc: "View gateway logs" },
+  { cmd: "mux update", desc: "Pull latest + rebuild" },
+  { cmd: "mux uninstall", desc: "Remove Mux completely" },
 ];
 
 export default function CLI() {

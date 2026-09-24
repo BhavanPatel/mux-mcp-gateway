@@ -2,6 +2,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ServerConfig } from '../registry.js';
 import { logger } from '../logger.js';
+import { redactCommand } from '../redact.js';
+import { VERSION } from '../version.js';
 
 export interface DownstreamConnection {
   client: Client;
@@ -12,7 +14,7 @@ export interface DownstreamConnection {
 export async function connectStdio(name: string, config: ServerConfig): Promise<DownstreamConnection> {
   if (!config.command) throw new Error(`Server "${name}" missing command`);
 
-  logger.info(`Spawning stdio downstream: ${name}`, { command: config.command, args: config.args });
+  logger.info(`Spawning stdio downstream: ${name}`, redactCommand(config.command, config.args));
 
   const transport = new StdioClientTransport({
     command: config.command,
@@ -20,7 +22,7 @@ export async function connectStdio(name: string, config: ServerConfig): Promise<
     env: { ...process.env, ...(config.env || {}) } as Record<string, string>,
   });
 
-  const client = new Client({ name: `mux->${name}`, version: '0.1.0' });
+  const client = new Client({ name: `mux->${name}`, version: VERSION });
   await client.connect(transport);
 
   const { tools } = await client.listTools();

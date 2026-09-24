@@ -37,7 +37,7 @@ const tools = [
   "uptime": "7200s",
   "activeConnections": 2,
   "memory": { "rss": "58MB" },
-  "metrics": { "totalCalls": 600, "estimatedTokensSaved": "~4.8M" }
+  "metrics": { "totalCalls": 600 }
 }`,
   },
 ];

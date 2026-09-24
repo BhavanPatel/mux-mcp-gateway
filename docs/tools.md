@@ -119,7 +119,6 @@ Shows Mux gateway diagnostics — useful for debugging connection issues or chec
     "trackingSince": "2025-01-15",
     "totalCalls": 342,
     "contextReductionPct": "95%",
-    "estimatedTokensSaved": 3283200,
     "topServer": "gitlab"
   }
 }

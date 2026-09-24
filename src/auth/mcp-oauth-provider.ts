@@ -5,23 +5,68 @@ import type {
   OAuthTokens,
   OAuthClientInformationFull,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { exec } from 'node:child_process';
-import { existsSync, mkdirSync, chmodSync, statSync } from 'node:fs';
+import { createServer, IncomingMessage, ServerResponse, Server } from 'node:http';
+import { AddressInfo } from 'node:net';
+import { execFile } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from '../logger.js';
 import { readSecureJson, writeSecureJson } from './crypto.js';
+import { loadToken, saveToken } from './index.js';
 
 const MUX_DIR = resolve(homedir(), '.mux');
-const TOKEN_PATH = resolve(MUX_DIR, 'tokens.json');
 const CLIENT_INFO_PATH = resolve(MUX_DIR, 'clients.json');
-const CALLBACK_PORT = 48912;
-const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}/oauth/callback`;
+const CALLBACK_PATH = '/oauth/callback';
+const DEFAULT_CALLBACK_TIMEOUT_MS = 120_000;
+
+/** Raised when the callback port is already bound. */
+export class CallbackPortInUseError extends Error {
+  constructor(port: number, cause?: unknown) {
+    super(`OAuth callback port ${port} is already in use`);
+    this.name = 'CallbackPortInUseError';
+    if (cause) (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+/** Raised when the provider denies access (OAuth `error` param). */
+export class AuthorizationDeniedError extends Error {
+  constructor(
+    public readonly oauthError: string,
+    description?: string,
+  ) {
+    super(description ? `OAuth error: ${oauthError} — ${description}` : `OAuth error: ${oauthError}`);
+    this.name = 'AuthorizationDeniedError';
+  }
+}
+
+/** Raised when the browser could not be launched. */
+export class BrowserOpenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BrowserOpenError';
+  }
+}
+
+/** Raised when the state parameter does not match what we sent. */
+export class StateMismatchError extends Error {
+  constructor() {
+    super('OAuth state parameter mismatch — possible CSRF, aborting');
+    this.name = 'StateMismatchError';
+  }
+}
 
 interface MuxOAuthProviderOptions {
   clientId?: string;
   scopes?: string[];
+  /** Override the callback wait timeout (ms). Primarily for tests. */
+  callbackTimeoutMs?: number;
+  /**
+   * Launch the browser for a URL. Resolves on success, rejects on failure.
+   * Injectable for tests. Defaults to the platform opener.
+   */
+  openBrowser?: (url: string) => Promise<void>;
 }
 
 function ensureDir() {
@@ -40,141 +85,79 @@ function writeJson(path: string, data: unknown) {
   writeSecureJson(path, data);
 }
 
-function openBrowser(url: string): void {
-  // Sanitize URL to prevent command injection via exec
-  const sanitized = url.replace(/["`$\\!]/g, '');
-  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-  exec(`${cmd} "${sanitized}"`);
+/**
+ * Open the URL via execFile (argument array, NO shell), so the URL is passed
+ * verbatim — `$`, `\`, `&`, etc. are preserved and cannot be shell-interpreted.
+ * Rejects on a non-zero exit code or spawn failure so the caller surfaces
+ * "no browser" instead of hanging.
+ */
+function defaultOpenBrowser(url: string): Promise<void> {
+  return new Promise((resolvePromise, reject) => {
+    let cmd: string;
+    let args: string[];
+    if (process.platform === 'darwin') {
+      cmd = 'open';
+      args = [url];
+    } else if (process.platform === 'win32') {
+      cmd = 'cmd';
+      args = ['/c', 'start', '', url];
+    } else {
+      cmd = 'xdg-open';
+      args = [url];
+    }
+    execFile(cmd, args, (err) => {
+      if (err) {
+        reject(new BrowserOpenError(`Failed to open browser (${cmd}): ${err.message}`));
+        return;
+      }
+      resolvePromise();
+    });
+  });
 }
 
 /**
- * OAuth provider that handles the browser-based auth flow for MCP HTTP servers.
- * Supports both:
- * - Dynamic client registration (SDK auto-registers with /register endpoint)
- * - Pre-registered clients (clientId from registry config, skips registration)
+ * OAuth provider for MCP HTTP servers. Token I/O goes through the auth facade
+ * (./index.js) — one store, one path, absolute expiry. No mtime polling, no
+ * fixed port, no swallowed errors.
  */
 export class MuxOAuthProvider implements OAuthClientProvider {
   private serverName: string;
   private options: MuxOAuthProviderOptions;
-  private _codeVerifier: string = '';
-  private _authResolve: ((code: string) => void) | null = null;
+  private _codeVerifier: string | null = null;
+  private _state: string | null = null;
+  private _callbackServer: Server | null = null;
+  private _boundPort = 0;
   private _authCodePromise: Promise<string> | null = null;
-  private _callbackServer: ReturnType<typeof createServer> | null = null;
+  private readonly _openBrowser: (url: string) => Promise<void>;
+  private readonly _callbackTimeoutMs: number;
 
   constructor(serverName: string, options: MuxOAuthProviderOptions = {}) {
     this.serverName = serverName;
     this.options = options;
+    this._openBrowser = options.openBrowser ?? defaultOpenBrowser;
+    this._callbackTimeoutMs = options.callbackTimeoutMs ?? DEFAULT_CALLBACK_TIMEOUT_MS;
   }
 
   /**
-   * Wait for the auth code from the browser callback OR token file update.
-   * Polls tokens.json every 1s so externally-completed auth (redirects that
-   * write tokens directly) resolves immediately without waiting full timeout.
-   * Also prints a countdown timer to stderr.
+   * Wait for the authorization code from the browser callback. Rejects (never
+   * hangs, never silently returns null) if the callback errors, times out, or
+   * the provider denies access — the real cause propagates to the caller.
    */
-  async waitForAuthCode(): Promise<string | null> {
-    if (!this._authCodePromise) return null;
-
-    // Race: callback server vs token-file polling
-    const tokenPollingPromise = this._pollForTokenCompletion();
-
-    try {
-      const result = await Promise.race([this._authCodePromise, tokenPollingPromise]);
-      // Stop the polling if callback won
-      this._stopPolling();
-      this._stopCountdown();
-      return result;
-    } catch {
-      this._stopPolling();
-      this._stopCountdown();
-      return null;
+  async waitForAuthCode(): Promise<string> {
+    if (!this._authCodePromise) {
+      throw new Error('waitForAuthCode called before redirectToAuthorization started the callback server');
     }
-  }
-
-  private _pollingInterval: ReturnType<typeof setInterval> | null = null;
-  private _countdownInterval: ReturnType<typeof setInterval> | null = null;
-
-  private _stopPolling(): void {
-    if (this._pollingInterval) {
-      clearInterval(this._pollingInterval);
-      this._pollingInterval = null;
-    }
-  }
-
-  private _stopCountdown(): void {
-    if (this._countdownInterval) {
-      clearInterval(this._countdownInterval);
-      this._countdownInterval = null;
-      // Clear the timer line
-      process.stderr.write('\r\x1b[K');
-    }
-  }
-
-  /**
-   * Poll tokens.json every 1s. If a valid token appears for this server,
-   * resolve with a sentinel value indicating auth completed externally.
-   * Also drives the countdown timer output.
-   */
-  private _pollForTokenCompletion(): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const AUTH_TIMEOUT_S = 120;
-      let remaining = AUTH_TIMEOUT_S;
-
-      // Print initial countdown
-      process.stderr.write(
-        `\r\x1b[K[MUX] ⏳ Waiting for "${this.serverName}" authorization... ${remaining}s remaining`,
-      );
-
-      this._countdownInterval = setInterval(() => {
-        remaining--;
-        if (remaining >= 0) {
-          process.stderr.write(
-            `\r\x1b[K[MUX] ⏳ Waiting for "${this.serverName}" authorization... ${remaining}s remaining`,
-          );
-        }
-      }, 1000);
-
-      // Record file mtime at auth start — if it changes, tokens were written
-      // No decryption needed — just detect the file was modified
-      let startMtime = 0;
-      try {
-        startMtime = statSync(TOKEN_PATH).mtimeMs;
-      } catch {
-        /* file may not exist yet */
-      }
-
-      this._pollingInterval = setInterval(() => {
-        try {
-          if (!existsSync(TOKEN_PATH)) return;
-          const currentMtime = statSync(TOKEN_PATH).mtimeMs;
-          if (currentMtime > startMtime) {
-            // Token file was modified — auth completed externally
-            this._stopPolling();
-            this._stopCountdown();
-            process.stderr.write(`\r\x1b[K[MUX] ✔ Authorization for "${this.serverName}" detected (token received)\n`);
-            resolve('__TOKEN_ALREADY_SAVED__');
-          }
-        } catch {
-          // Ignore stat errors, keep polling
-        }
-      }, 1000);
-
-      // Timeout fallback — reject after AUTH_TIMEOUT_S
-      setTimeout(() => {
-        this._stopPolling();
-        this._stopCountdown();
-        reject(new Error(`Token polling timed out (${AUTH_TIMEOUT_S}s)`));
-      }, AUTH_TIMEOUT_S * 1000);
-    });
+    return this._authCodePromise;
   }
 
   get redirectUrl(): string {
-    return REDIRECT_URI;
+    // Valid only after the callback server has bound (see _startCallbackServer).
+    return `http://127.0.0.1:${this._boundPort}${CALLBACK_PATH}`;
   }
 
   get clientMetadata(): OAuthClientMetadata {
     return {
-      redirect_uris: [REDIRECT_URI],
+      redirect_uris: [this.redirectUrl],
       token_endpoint_auth_method: 'none',
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
@@ -184,24 +167,23 @@ export class MuxOAuthProvider implements OAuthClientProvider {
   }
 
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    // Check stored client info first (from dynamic registration)
     const store = readJson(CLIENT_INFO_PATH);
-    if (store[this.serverName]) return store[this.serverName];
-
-    // If we have a pre-registered clientId from the registry config,
-    // return it directly — this skips dynamic client registration
+    const stored = store[this.serverName];
+    if (stored && typeof stored === 'object') {
+      return stored as OAuthClientInformation;
+    }
     if (this.options.clientId) {
       logger.debug(`Using pre-registered client "${this.options.clientId}" for "${this.serverName}"`);
-      return {
+      const info: OAuthClientInformationFull = {
         client_id: this.options.clientId,
-        redirect_uris: [REDIRECT_URI],
+        redirect_uris: [this.redirectUrl],
         token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
         client_name: `Mux Gateway (${this.serverName})`,
-      } as OAuthClientInformationFull;
+      };
+      return info;
     }
-
     return undefined;
   }
 
@@ -213,41 +195,40 @@ export class MuxOAuthProvider implements OAuthClientProvider {
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
-    const store = readJson(TOKEN_PATH);
-    const entry = store[this.serverName];
-    if (!entry) return undefined;
-    return {
-      access_token: entry.access_token || entry.accessToken,
-      refresh_token: entry.refresh_token || entry.refreshToken,
-      token_type: entry.token_type || 'Bearer',
-      expires_in: entry.expires_in,
-    };
+    return loadToken(this.serverName);
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
-    const store = readJson(TOKEN_PATH);
-    store[this.serverName] = tokens;
-    writeJson(TOKEN_PATH, store);
+    saveToken(this.serverName, tokens);
     logger.info(`Tokens saved for "${this.serverName}"`);
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
-    logger.info(`Opening browser for "${this.serverName}" authorization...`);
+    logger.info(`Starting authorization for "${this.serverName}"...`);
 
-    // Start callback server — store promise so waitForAuthCode() can await it
-    this._authCodePromise = this._startCallbackServer();
+    // 1. Bind the callback server FIRST and await the listen callback, so the
+    //    port is open before the browser can redirect back to it.
+    const { codePromise } = await this._startCallbackServer();
+    this._authCodePromise = codePromise;
 
-    // Open browser
-    openBrowser(authorizationUrl.toString());
+    // Ensure the state we validate against is on the outgoing URL.
+    if (this._state && !authorizationUrl.searchParams.get('state')) {
+      authorizationUrl.searchParams.set('state', this._state);
+    }
+    const sentState = authorizationUrl.searchParams.get('state');
+    if (sentState) this._state = sentState;
 
-    // Print to stderr so user sees it in terminal
+    // 2. Now open the browser. If it fails, tear down and surface the cause.
+    try {
+      await this._openBrowser(authorizationUrl.toString());
+    } catch (err) {
+      this._closeCallbackServer();
+      throw err;
+    }
+
     process.stderr.write(`\n[MUX] Authorization required for "${this.serverName}"\n`);
-    process.stderr.write(`[MUX] If browser doesn't open, visit:\n`);
+    process.stderr.write(`[MUX] If your browser didn't open, visit:\n`);
     process.stderr.write(`[MUX] ${authorizationUrl.toString()}\n\n`);
-
-    // NOTE: We intentionally do NOT await the promise here.
-    // The SDK will throw UnauthorizedError, and http.ts will call waitForAuthCode()
-    // which awaits the promise, then calls transport.finishAuth(code).
   }
 
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
@@ -255,62 +236,150 @@ export class MuxOAuthProvider implements OAuthClientProvider {
   }
 
   async codeVerifier(): Promise<string> {
+    if (!this._codeVerifier) {
+      // Never send an empty verifier — that silently breaks PKCE. Fail loud.
+      throw new Error(
+        `PKCE code verifier missing for "${this.serverName}" — saveCodeVerifier was never called before the token exchange`,
+      );
+    }
     return this._codeVerifier;
   }
 
-  private _startCallbackServer(): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this._callbackServer?.close();
-        reject(new Error('OAuth callback timed out (120s)'));
-      }, 120_000);
+  /** SDK hook: generate a fresh, unguessable state value. */
+  async state(): Promise<string> {
+    if (!this._state) {
+      this._state = randomBytes(32).toString('base64url');
+    }
+    return this._state;
+  }
 
-      this._callbackServer = createServer((req: IncomingMessage, res: ServerResponse) => {
-        const url = new URL(req.url || '/', `http://localhost:${CALLBACK_PORT}`);
+  /**
+   * Bind an ephemeral callback server and return a promise for the auth code.
+   * The outer promise resolves only once the socket is listening, so callers
+   * can safely open the browser afterwards. Always cleans up: on success,
+   * error, timeout, denial, or a callback with no code, the server is closed
+   * and the timer cleared.
+   */
+  private _startCallbackServer(): Promise<{ codePromise: Promise<string> }> {
+    return new Promise<{ codePromise: Promise<string> }>((resolveOuter, rejectOuter) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let listening = false;
 
-        if (url.pathname !== '/oauth/callback' && url.pathname !== '/callback') {
-          res.writeHead(404);
-          res.end('Not found');
-          return;
-        }
+      const codePromise = new Promise<string>((resolveCode, rejectCode) => {
+        const cleanup = () => {
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          this._closeCallbackServer();
+        };
+        const succeed = (code: string) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolveCode(code);
+        };
+        const fail = (err: Error) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          rejectCode(err);
+        };
 
-        const code = url.searchParams.get('code');
-        const error = url.searchParams.get('error');
+        const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+          let url: URL;
+          try {
+            url = new URL(req.url || '/', `http://127.0.0.1:${this._boundPort}`);
+          } catch {
+            res.writeHead(400);
+            res.end('Bad request');
+            return;
+          }
 
-        if (error) {
-          res.writeHead(400, { 'Content-Type': 'text/html' });
-          res.end(`<html><body><h2>Mux: Authorization failed</h2><p>${error}</p></body></html>`);
-          clearTimeout(timeout);
-          this._callbackServer?.close();
-          reject(new Error(`OAuth error: ${error}`));
-          return;
-        }
+          if (url.pathname !== CALLBACK_PATH && url.pathname !== '/callback') {
+            res.writeHead(404);
+            res.end('Not found');
+            return;
+          }
 
-        if (!code) {
-          res.writeHead(400);
-          res.end('No code received');
-          return;
-        }
+          const code = url.searchParams.get('code');
+          const error = url.searchParams.get('error');
+          const returnedState = url.searchParams.get('state');
 
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end('<html><body><h2>Mux: Authorization successful!</h2><p>You can close this tab.</p></body></html>');
+          if (error) {
+            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.end(`<html><body><h2>Mux: Authorization failed</h2><p>${error}</p></body></html>`);
+            fail(new AuthorizationDeniedError(error, url.searchParams.get('error_description') ?? undefined));
+            return;
+          }
 
-        clearTimeout(timeout);
-        this._callbackServer?.close();
-        this._stopPolling();
-        this._stopCountdown();
-        process.stderr.write(`\r\x1b[K[MUX] ✔ Authorization callback received for "${this.serverName}"\n`);
-        resolve(code);
+          // Validate state before trusting the code.
+          if (this._state && returnedState !== this._state) {
+            res.writeHead(400);
+            res.end('State mismatch');
+            fail(new StateMismatchError());
+            return;
+          }
+
+          if (!code) {
+            res.writeHead(400);
+            res.end('No authorization code received');
+            fail(new Error(`OAuth callback for "${this.serverName}" arrived without an authorization code`));
+            return;
+          }
+
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h2>Mux: Authorization successful!</h2><p>You can close this tab.</p></body></html>');
+          process.stderr.write(`\r\x1b[K[MUX] ✔ Authorization callback received for "${this.serverName}"\n`);
+          succeed(code);
+        });
+
+        this._callbackServer = server;
+
+        server.on('error', (err: NodeJS.ErrnoException) => {
+          const e =
+            err.code === 'EADDRINUSE'
+              ? new CallbackPortInUseError(this._boundPort, err)
+              : new Error(`Callback server error: ${err.message}`);
+          // If the failure happened before listen resolved, surface it to the
+          // caller awaiting the outer promise too.
+          if (!listening) rejectOuter(e);
+          fail(e);
+        });
+
+        // Ephemeral port: listen on 0, read the assigned port, THEN resolve.
+        server.listen(0, '127.0.0.1', () => {
+          listening = true;
+          const addr = server.address() as AddressInfo | null;
+          this._boundPort = addr ? addr.port : 0;
+          logger.debug(`OAuth callback server listening on 127.0.0.1:${this._boundPort}`);
+
+          timer = setTimeout(() => {
+            fail(new Error(`OAuth callback timed out after ${this._callbackTimeoutMs}ms`));
+          }, this._callbackTimeoutMs);
+          if (typeof timer.unref === 'function') timer.unref();
+
+          resolveOuter({ codePromise });
+        });
       });
 
-      this._callbackServer.listen(CALLBACK_PORT, '127.0.0.1', () => {
-        logger.debug(`OAuth callback server listening on 127.0.0.1:${CALLBACK_PORT}`);
-      });
-
-      this._callbackServer.on('error', (err) => {
-        clearTimeout(timeout);
-        reject(new Error(`Callback server error: ${err.message}`));
+      // Prevent an unhandledRejection if the caller hasn't attached yet.
+      codePromise.catch(() => {
+        /* handled by caller */
       });
     });
+  }
+
+  /** Idempotent teardown: close the server and drop the reference. */
+  private _closeCallbackServer(): void {
+    if (this._callbackServer) {
+      try {
+        this._callbackServer.close();
+      } catch {
+        /* already closing */
+      }
+      this._callbackServer = null;
+    }
   }
 }

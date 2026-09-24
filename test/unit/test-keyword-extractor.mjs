@@ -2,13 +2,8 @@
  * Unit tests for keyword extraction from tool names/descriptions.
  * Run: node --test test/test-keyword-extractor.mjs
  */
-import { describe, it, before } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '../..');
 
 // Replicate the keyword extraction logic for unit testing
 // (since generateAndStoreKeywords has side effects — writes to registry)
@@ -183,7 +178,7 @@ function isValidKeyword(word) {
 
 function extractWordsFromTool(tool) {
   const words = [];
-  for (const part of tool.name.split(/[_\-]/)) {
+  for (const part of tool.name.split(/[_-]/)) {
     if (part.length >= MIN_NAME_PART_LENGTH && !STOP_WORDS.has(part.toLowerCase())) {
       words.push(part.toLowerCase());
     }

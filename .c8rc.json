@@ -1,0 +1,6 @@
+{
+  "reporter": ["text", "text-summary", "lcov"],
+  "exclude": ["node_modules/**", "test/**", "coverage/**", "website/**", "**/*.tsx", "src/tui/**"],
+  "//": "check-coverage is intentionally OFF. The e2e/unit suites exercise the BUILT dist/*.js in spawned child processes, not src/*.ts directly. c8 currently reports ~0% because dist is (correctly) excluded from the src-oriented report and there is no dist->src sourcemap remap wired up. A threshold on a 0% measurement would be a vacuous, lying gate. Enabling a real gate requires instrumenting dist and mapping back to src via sourcemaps (tracked as a follow-up). Until then coverage is report-only and uploaded as a CI artifact.",
+  "check-coverage": false
+}

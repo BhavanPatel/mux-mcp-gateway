@@ -13,18 +13,19 @@ interface HelpProps {
 }
 
 const COMMANDS = [
-  { cmd: 'mux-cli', desc: 'Interactive menu (dashboard or onboarding)' },
-  { cmd: 'mux-cli setup', desc: 'Import servers from existing mcp.json' },
-  { cmd: 'mux-cli add <name>', desc: 'Add a server (interactive or one-liner)' },
-  { cmd: 'mux-cli remove <name>', desc: 'Remove a server from registry' },
-  { cmd: 'mux-cli auth [name|--all]', desc: 'Trigger OAuth for HTTP server(s)' },
-  { cmd: 'mux-cli health', desc: 'Health check all servers' },
-  { cmd: 'mux-cli list', desc: 'Show registered servers + auth status' },
-  { cmd: 'mux-cli status', desc: 'Show Mux process info' },
-  { cmd: 'mux-cli metrics', desc: 'Usage stats and context savings' },
-  { cmd: 'mux-cli keywords [name]', desc: 'View/edit discovery tags for a server' },
-  { cmd: 'mux-cli update', desc: 'Pull latest code + rebuild' },
-  { cmd: 'mux-cli uninstall', desc: 'Remove Mux completely' },
+  { cmd: 'mux', desc: 'Launch this dashboard (TTY); headless gateway otherwise' },
+  { cmd: 'mux serve', desc: 'Run the MCP gateway on stdio' },
+  { cmd: 'mux add <name>', desc: 'Add a server (--transport http|stdio)' },
+  { cmd: 'mux remove <name>', desc: 'Remove a server from the registry' },
+  { cmd: 'mux edit <name>', desc: 'Edit discovery keywords for a server' },
+  { cmd: 'mux auth <name>', desc: 'Authorize a server via OAuth' },
+  { cmd: 'mux health [name]', desc: 'Check server reachability' },
+  { cmd: 'mux metrics', desc: 'Show usage metrics' },
+  { cmd: 'mux doctor', desc: 'Diagnose the installation' },
+  { cmd: 'mux logs [-f]', desc: 'Show or follow recent log lines' },
+  { cmd: 'mux report-bug', desc: 'Gather a redacted diagnostic bundle' },
+  { cmd: 'mux update', desc: 'Check for a newer version' },
+  { cmd: 'mux uninstall', desc: 'Remove Mux data (~/.mux)' },
 ];
 
 const SHORTCUTS = [

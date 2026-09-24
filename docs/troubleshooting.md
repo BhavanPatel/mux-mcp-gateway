@@ -63,9 +63,7 @@ rm ~/.mux/tokens.json
 Then trigger re-auth:
 
 ```bash
-mux-cli auth --all
-# or for a specific server:
-mux-cli auth <server-name>
+mux auth <server-name>
 ```
 
 ---
@@ -81,7 +79,7 @@ rm -rf ~/.mux
 Then re-run setup:
 
 ```bash
-mux-cli setup
+mux add <name> --transport <http|stdio>
 ```
 
 This removes all cached tokens, client registrations, metrics, and the tool catalog. Servers will need to be re-authorized on next use.
@@ -142,9 +140,9 @@ Then retry the auth flow.
 ```
 
 > [!TIP]
-> `mux-cli setup` adds all 4 tools to autoApprove automatically.
+> `mux add` adds a server; the `mux` TUI dashboard lists all 4 tools so you can add them to autoApprove.
 
-**Kiro users:** `mux-cli setup` also installs a PreToolUse hook at `~/.kiro/hooks/mux-auto-approve.json` that auto-approves Mux tool calls without prompting. If you need to remove it, run `mux-cli uninstall` or delete the file manually.
+**Kiro users:** The `mux` TUI dashboard also installs a PreToolUse hook at `~/.kiro/hooks/mux-auto-approve.json` that auto-approves Mux tool calls without prompting. If you need to remove it, run `mux uninstall` or delete the file manually.
 
 **Cursor users:** Setup installs a rules file at `~/.cursor/rules/mux-auto-approve.mdc` as an additional signal.
 

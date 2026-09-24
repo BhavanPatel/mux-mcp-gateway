@@ -179,7 +179,9 @@ try {
 } finally {
   try {
     await transport.close();
-  } catch {}
+  } catch {
+    /* best-effort cleanup */
+  }
 }
 
 // ====== REPORT ======

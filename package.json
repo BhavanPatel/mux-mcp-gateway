@@ -1,32 +1,30 @@
 {
   "name": "mux-mcp-gateway",
-  "version": "1.10.0",
+  "version": "2.0.0",
   "description": "MCP Gateway Router — one MCP to rule them all",
   "type": "module",
   "bin": {
-    "mux": "dist/index.js",
-    "mux-cli": "mux.sh"
+    "mux": "dist/index.js"
   },
   "files": [
     "dist",
-    "scripts",
-    "mux.sh",
     "servers.example.json"
   ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "start": "node dist/index.js",
-    "test": "bash test/test.sh",
+    "test": "npm run test:ci",
     "test:unit": "node --test ./test/unit/test-*.mjs ./test/auth/test-*.mjs",
-    "test:e2e": "node test/e2e/test-mcp.mjs && node test/e2e/test-pool.mjs",
+    "test:e2e": "node test/e2e/test-mcp.mjs && node test/e2e/test-pool.mjs && node test/e2e/test-cli.mjs",
     "test:ci": "npm run test:unit && npm run test:e2e",
-    "test:coverage": "c8 --reporter=text --reporter=text-summary --reporter=lcov --exclude='node_modules/**' npm run test:ci",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
+    "test:coverage": "c8 npm run test:ci",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "format": "prettier --write 'src/**/*.ts' 'test/**/*.mjs' '*.json' '*.ts'",
     "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.mjs' '*.json' '*.ts'",
-    "precheck": "npm run build && npm run lint && npm run format:check && npm run test:ci",
+    "precheck": "npm run build && npm run typecheck && npm run lint && npm run format:check && npm run test:ci",
     "prepare": "git config core.hooksPath .hooks",
     "prepublishOnly": "npm run build",
     "install-cli": "npm install && npm run build && npm link"
@@ -59,15 +57,17 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.12.1",
-    "chalk": "^4.1.2",
-    "ink": "^7.1.1",
-    "ink-gradient": "^4.0.1",
-    "react": "^19.2.8"
+    "chalk": "4.1.2",
+    "ink": "7.1.1",
+    "ink-gradient": "4.0.1",
+    "react": "19.3.0",
+    "yargs": "18.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.7.0",
     "@types/node": "22.10.5",
     "@types/react": "^19.2.17",
+    "@types/yargs": "17.0.35",
     "c8": "^10.1.2",
     "eslint": "^9.7.0",
     "eslint-config-prettier": "^9.1.0",
