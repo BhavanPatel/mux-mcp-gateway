@@ -86,6 +86,34 @@ function App() {
   }, [navigateTo]);
 
   // Map action menu index to action
+  // Drive one server through the OAuth flow, reflecting progress into the
+  // auth-flow view: waiting -> success/error. Shared by the dashboard
+  // "Authorize N servers" action and the per-server retry affordance.
+  const runAuth = useCallback((serverName: string) => {
+    // Update the server's status to 'waiting' in the auth-flow view
+    setView((prev) => {
+      if (prev.name !== 'auth-flow') return prev;
+      const updated = prev.servers.map((s) =>
+        s.name === serverName ? { ...s, status: 'waiting' as const, error: undefined } : s,
+      );
+      return { name: 'auth-flow', servers: updated };
+    });
+    // Trigger OAuth discovery + browser flow
+    authServer(serverName).then((result) => {
+      setView((prev) => {
+        if (prev.name !== 'auth-flow') return prev;
+        const updated = prev.servers.map((s) =>
+          s.name === serverName
+            ? { ...s, status: result.success ? ('success' as const) : ('error' as const), error: result.error }
+            : s,
+        );
+        return { name: 'auth-flow', servers: updated };
+      });
+    });
+  }, []);
+
+  const handleAuthRetry = useCallback((serverName: string) => runAuth(serverName), [runAuth]);
+
   const handleDashboardAction = useCallback(
     (index: number) => {
       const hasAttention = registry.needsAuthCount > 0;
@@ -99,6 +127,11 @@ function App() {
             .filter((s) => s.status === 'needs-auth')
             .map((s) => ({ name: s.name, status: 'pending' as const }));
           navigateTo({ name: 'auth-flow', servers: authServers });
+          // Kick off the OAuth flow for each server; without this the view
+          // sits on 'pending' forever and no browser ever opens.
+          for (const s of authServers) {
+            runAuth(s.name);
+          }
           return;
         }
         actionIndex -= 1;
@@ -150,7 +183,7 @@ function App() {
           break;
       }
     },
-    [registry, navigateTo],
+    [registry, navigateTo, runAuth],
   );
 
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -197,29 +230,6 @@ function App() {
     },
     [],
   );
-
-  const handleAuthRetry = useCallback((serverName: string) => {
-    // Update the server's status to 'waiting' in the auth-flow view
-    setView((prev) => {
-      if (prev.name !== 'auth-flow') return prev;
-      const updated = prev.servers.map((s) =>
-        s.name === serverName ? { ...s, status: 'waiting' as const, error: undefined } : s,
-      );
-      return { name: 'auth-flow', servers: updated };
-    });
-    // Trigger OAuth discovery + browser flow
-    authServer(serverName).then((result) => {
-      setView((prev) => {
-        if (prev.name !== 'auth-flow') return prev;
-        const updated = prev.servers.map((s) =>
-          s.name === serverName
-            ? { ...s, status: result.success ? ('success' as const) : ('error' as const), error: result.error }
-            : s,
-        );
-        return { name: 'auth-flow', servers: updated };
-      });
-    });
-  }, []);
 
   const handleHealthRetryAll = useCallback(() => {
     const results: ServerCheckResult[] = registry.servers.map((s) => ({
