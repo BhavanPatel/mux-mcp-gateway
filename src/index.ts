@@ -19,18 +19,26 @@ import { installCrashHandlers } from './errors.js';
  */
 const argv = process.argv.slice(2);
 const first = argv[0];
-const isDashboard = argv.includes('--tui') || first === 'dashboard';
-// Gateway path: bare `mux`, `mux serve`, or only colour flags (which env-flags
-// consumes). Everything else — including --version/--help and any subcommand —
-// goes to the yargs CLI. --version/--help must NOT start the gateway.
 const GATEWAY_ONLY_FLAGS = new Set(['--plain', '--no-color']);
 const isColorOnly = argv.length > 0 && argv.every((a) => GATEWAY_ONLY_FLAGS.has(a));
-const isGateway = !isDashboard && (first === undefined || first === 'serve' || isColorOnly);
+// stdout TTY decides bare `mux`: interactive terminal → dashboard, pipe/redirect
+// → headless gateway. Read directly (not via env-flags) to keep this dispatch
+// dependency-free and before any TUI import.
+const stdoutIsTTY = Boolean(process.stdout.isTTY);
+// Bare `mux` (no args) or bare `mux` + only colour flags counts as "no command".
+const noCommand = first === undefined || isColorOnly;
+// Dashboard: explicit `--tui`/`dashboard`, OR a no-command invocation on a TTY.
+const isDashboard = argv.includes('--tui') || first === 'dashboard' || (noCommand && stdoutIsTTY);
+// Gateway path: `mux serve`, or a no-command invocation with NO TTY (piped).
+// --version/--help and any subcommand fall through to the yargs CLI.
+const isGateway = !isDashboard && (first === 'serve' || noCommand);
 
 if (isDashboard) {
   // WS-B3: the Ink TUI requires an interactive terminal. Refuse rather than
   // rendering escape sequences into a pipe/file. The headless MCP path is
-  // unaffected — this gate only guards the interactive branch.
+  // unaffected — this gate only guards the interactive branch. (Reachable via
+  // an explicit `--tui`/`dashboard` on a non-TTY; bare `mux` non-TTY is routed
+  // to the gateway above.)
   const { envFlags } = await import('./tui/env-flags.js');
   if (!envFlags.isTTY) {
     process.stderr.write(
@@ -41,8 +49,8 @@ if (isDashboard) {
   const { renderTui } = await import('./tui/App.js');
   renderTui();
 } else if (isGateway) {
-  // Bare `mux`, `mux serve`, or `mux --plain`/`--no-color` (color flags consumed
-  // by env-flags, not a subcommand). Run the gateway directly — no yargs.
+  // `mux serve`, bare `mux` piped, or `mux --plain`/`--no-color` (colour flags
+  // consumed by env-flags, not a subcommand). Run the gateway directly — no yargs.
   startGateway().catch((err) => {
     logger.error(`Fatal: ${err.stack || err.message}`);
     process.exit(1);
