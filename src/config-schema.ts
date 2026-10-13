@@ -10,6 +10,7 @@
  * without a breaking change.
  */
 import { z } from 'zod';
+import { errorMessage } from './errors.js';
 
 export const CURRENT_REGISTRY_VERSION = 2;
 
@@ -78,8 +79,8 @@ export function parseRegistry(raw: string): RegistryInput {
   let json: unknown;
   try {
     json = JSON.parse(raw);
-  } catch (err: any) {
-    throw new ConfigError('Registry file is not valid JSON', err?.message);
+  } catch (err: unknown) {
+    throw new ConfigError('Registry file is not valid JSON', errorMessage(err));
   }
 
   if (json === null || typeof json !== 'object' || Array.isArray(json)) {

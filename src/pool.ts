@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { getServer, resolveServerName, ServerConfig } from './registry.js';
+import { errorMessage } from './errors.js';
 import { connectStdio, DownstreamConnection } from './transport/stdio.js';
 import { connectHttp, HttpDownstreamConnection } from './transport/http.js';
 import { storeToolsForServer } from './tool-catalog.js';
@@ -163,8 +164,8 @@ async function disconnect(name: string): Promise<void> {
     }
     record({ ts: Date.now(), type: 'kill', server: name });
     logger.info(`Disconnected: ${name}`);
-  } catch (err: any) {
-    logger.warn(`Error disconnecting ${name}: ${err.message}`);
+  } catch (err: unknown) {
+    logger.warn(`Error disconnecting ${name}: ${errorMessage(err)}`);
   }
 }
 
@@ -199,9 +200,9 @@ export async function getOrConnect(name: string): Promise<PoolEntry> {
       breaker.recordSuccess();
       return entry;
     })
-    .catch((err: any) => {
+    .catch((err: unknown) => {
       breaker.recordFailure();
-      negativeCache.set(resolved, { ts: Date.now(), reason: err?.message || 'connect failed' });
+      negativeCache.set(resolved, { ts: Date.now(), reason: errorMessage(err) || 'connect failed' });
       throw err;
     })
     .finally(() => {
@@ -235,10 +236,10 @@ export async function callTool(serverName: string, toolName: string, args: Recor
       );
       record({ ts: Date.now(), type: 'call', server: serverName, durationMs: Date.now() - start });
       return result;
-    } catch (err: any) {
-      lastError = err;
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(errorMessage(err));
       const kind = classifyError(err);
-      log.warn(`Call failed for ${serverName}.${toolName} (${kind}): ${err.message}`);
+      log.warn(`Call failed for ${serverName}.${toolName} (${kind}): ${errorMessage(err)}`);
 
       // Validation errors are not transient: replaying doubles side effects
       // for non-idempotent tools. Surface immediately, no reconnect/retry.

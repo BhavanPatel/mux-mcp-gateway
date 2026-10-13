@@ -38,6 +38,17 @@ export class MuxError extends Error {
   }
 }
 
+/** Extract a human-readable message from an unknown thrown value. */
+export function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object' && 'message' in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === 'string') return m;
+  }
+  return String(err);
+}
+
 /** Map any thrown value to a distinct process exit code. */
 export function mapErrorToExitCode(err: unknown): ExitCodeValue {
   const code = err instanceof MuxError ? err.code : undefined;

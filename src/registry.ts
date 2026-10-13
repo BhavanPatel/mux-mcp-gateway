@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from './logger.js';
 import { parseRegistry, ConfigError } from './config-schema.js';
+import { errorMessage } from './errors.js';
 import { mutateRegistry, NOT_FOUND } from './config-writer.js';
 
 export interface ServerConfig {
@@ -229,14 +230,14 @@ export function loadRegistry(path?: string): Registry {
         `Unresolved env vars in registry config: ${[...unresolvedEnvVars].join(', ')} (expanded to empty string)`,
       );
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Fail CLOSED: a malformed/corrupt config must not masquerade as an empty
     // registry (which would silently report "success with zero servers"). Keep
     // the last-good in-memory registry and rethrow so startup can surface it.
     if (err instanceof ConfigError) {
       logger.error(`Registry config invalid, refusing to load: ${err.message}`, { path: registryPath });
     } else {
-      logger.error(`Failed to load registry: ${err.message}`, { path: registryPath });
+      logger.error(`Failed to load registry: ${errorMessage(err)}`, { path: registryPath });
     }
     throw err;
   }

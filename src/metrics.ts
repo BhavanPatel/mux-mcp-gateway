@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'n
 import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from './logger.js';
+import { errorMessage } from './errors.js';
 
 const METRICS_PATH = resolve(homedir(), '.mux', 'metrics.json');
 
@@ -53,8 +54,8 @@ function persist(): void {
     writeFileSync(METRICS_PATH, JSON.stringify(store), 'utf-8');
     chmodSync(METRICS_PATH, 0o600); // local-only data — owner read/write only
     dirty = false;
-  } catch (err: any) {
-    logger.debug(`Failed to persist metrics: ${err.message}`);
+  } catch (err: unknown) {
+    logger.debug(`Failed to persist metrics: ${errorMessage(err)}`);
   }
 }
 

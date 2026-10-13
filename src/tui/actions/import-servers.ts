@@ -12,6 +12,7 @@ import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { mutateRegistry } from '../../config-writer.js';
 import { ConfigError, RegistryInput, ServerConfigInput } from '../../config-schema.js';
+import { errorMessage } from '../../errors.js';
 
 const REGISTRY_PATH = resolve(homedir(), '.mux', 'servers.json');
 
@@ -103,9 +104,9 @@ export async function importFromMcpJson(mcpJsonPath: string): Promise<ImportResu
     if (!outcome.ok) {
       return { imported: [], skipped: [], error: `Registry write failed: ${outcome.message}` };
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Fail closed on a corrupt existing registry — the writer preserved a backup.
-    const msg = err instanceof ConfigError ? err.message : err?.message || 'unknown error';
+    const msg = err instanceof ConfigError ? err.message : errorMessage(err) || 'unknown error';
     return { imported: [], skipped: [], error: `Existing registry is invalid, refusing to overwrite: ${msg}` };
   }
 

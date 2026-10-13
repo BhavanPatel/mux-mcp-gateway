@@ -38,7 +38,8 @@ export function useRegistry(): RegistryData {
     const tokens = loadTokens();
     const catalog = loadCatalog();
 
-    servers = Object.entries(raw.servers || {}).map(([name, config]: [string, any]) => {
+    const rawServers = (raw.servers || {}) as Record<string, { transport?: string; url?: string; keywords?: string[] }>;
+    servers = Object.entries(rawServers).map(([name, config]) => {
       const isHttp = config.transport === 'http' || !!config.url;
       const hasToken = !!tokens[name];
       const toolCount = catalog[name]?.length;

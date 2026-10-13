@@ -26,6 +26,7 @@ import {
 import { dirname, basename, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { parseRegistry, RegistryInput, CURRENT_REGISTRY_VERSION } from './config-schema.js';
+import { errorMessage } from './errors.js';
 
 const MAX_BACKUPS = parseInt(process.env.MUX_MAX_CONFIG_BACKUPS || '10', 10);
 
@@ -147,8 +148,8 @@ export function mutateRegistry(
       backupRegistry(path);
       writeAtomic(path, serialize(next));
       return { ok: true, value: undefined };
-    } catch (err: any) {
-      return { ok: false, error: 'write-failed', message: err?.message || 'write failed' };
+    } catch (err: unknown) {
+      return { ok: false, error: 'write-failed', message: errorMessage(err) || 'write failed' };
     }
   });
 }
@@ -172,8 +173,8 @@ export function restoreLatestBackup(path: string): Promise<MutateOutcome<string>
       const src = resolve(dir, latest);
       writeAtomic(path, readFileSync(src, 'utf-8'));
       return { ok: true, value: src };
-    } catch (err: any) {
-      return { ok: false, error: 'write-failed', message: err?.message || 'restore failed' };
+    } catch (err: unknown) {
+      return { ok: false, error: 'write-failed', message: errorMessage(err) || 'restore failed' };
     }
   });
 }

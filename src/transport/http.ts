@@ -6,6 +6,21 @@ import { logger } from '../logger.js';
 import { createAuthProvider } from '../auth/index.js';
 import { VERSION } from '../version.js';
 
+/**
+ * Detect an OAuth "unauthorized" failure from an unknown thrown value, covering
+ * the real UnauthorizedError, a structurally-equal error from a duplicate SDK
+ * copy (tsup `splitting:false` can duplicate the class), and the 401 message
+ * shapes the transport surfaces. Replaces the previously-duplicated 5-clause
+ * `err: any` block at both connect sites.
+ */
+function isUnauthorizedError(err: unknown): boolean {
+  if (err instanceof UnauthorizedError) return true;
+  const name = (err as { constructor?: { name?: string } } | null)?.constructor?.name;
+  if (name === 'UnauthorizedError') return true;
+  const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  return msg.includes('Unauthorized') || msg.includes('HTTP 401') || msg.includes('401');
+}
+
 /** Wrap a promise so it rejects if it hasn't settled within `ms`. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -90,7 +105,7 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
     const { tools } = await clientNoAuth.listTools();
     logger.info(`Connected to ${name} (HTTP, no auth): ${tools.length} tools available`);
     return { client: clientNoAuth, transport: transportNoAuth, tools };
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Clean up failed no-auth transport
     try {
       await transportNoAuth.close();
@@ -98,12 +113,7 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
       /* ignore */
     }
 
-    const isUnauthorized =
-      err instanceof UnauthorizedError ||
-      err.constructor?.name === 'UnauthorizedError' ||
-      err.message?.includes('Unauthorized') ||
-      err.message?.includes('HTTP 401') ||
-      err.message?.includes('401');
+    const isUnauthorized = isUnauthorizedError(err);
 
     if (!isUnauthorized) {
       // Not an auth error — propagate the real error
@@ -138,13 +148,8 @@ export async function connectHttp(name: string, config: ServerConfig): Promise<H
 
     try {
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, `connect("${name}")`);
-    } catch (authErr: any) {
-      const isAuthErr =
-        authErr instanceof UnauthorizedError ||
-        authErr.constructor?.name === 'UnauthorizedError' ||
-        authErr.message?.includes('Unauthorized') ||
-        authErr.message?.includes('HTTP 401') ||
-        authErr.message?.includes('401');
+    } catch (authErr: unknown) {
+      const isAuthErr = isUnauthorizedError(authErr);
 
       if (!isAuthErr) throw authErr;
 

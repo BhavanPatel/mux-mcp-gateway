@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { getRegistry } from './registry.js';
 import { callTool, getPoolStatus, getOrConnect } from './pool.js';
@@ -6,6 +7,7 @@ import { getToolsForServer, getCatalogStats } from './tool-catalog.js';
 import { findToolsAcrossServers, resolveServerByToolName } from './tool-discovery.js';
 import { getQuickStats, getInsights } from './metrics.js';
 import { logger } from './logger.js';
+import { errorMessage } from './errors.js';
 import { VERSION } from './version.js';
 
 const startTime = Date.now();
@@ -99,11 +101,11 @@ export function createServer(): McpServer {
         }
 
         const result = await callTool(resolvedServer, toolName, toolArgs);
-        return result as any;
-      } catch (err: any) {
-        logger.error(`mux_call_tool failed: ${err.message}`, { server: serverName, tool: toolName });
+        return result as CallToolResult;
+      } catch (err: unknown) {
+        logger.error(`mux_call_tool failed: ${errorMessage(err)}`, { server: serverName, tool: toolName });
         return {
-          content: [{ type: 'text' as const, text: `Error: ${err.message}` }],
+          content: [{ type: 'text' as const, text: `Error: ${errorMessage(err)}` }],
           isError: true,
         };
       }
